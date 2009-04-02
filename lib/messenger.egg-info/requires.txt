@@ -1,0 +1,4 @@
+simplejson
+stomper
+pydispatcher
+twisted

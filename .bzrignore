@@ -1,0 +1,5 @@
+*.ini
+dist
+lib/newman_messenger.egg-info/
+build
+*.egg
