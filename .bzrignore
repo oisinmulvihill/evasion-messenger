@@ -1,5 +1,5 @@
+lib/evasion_messenger.egg-info
 *.ini
 dist
-lib/newman_messenger.egg-info/
 build
 *.egg

@@ -9,7 +9,7 @@ Oisin Mulvihill
 """
 from setuptools import setup, find_packages
 
-Name='messenger'
+Name='evasion-messenger'
 ProjecUrl="" #""
 Version='1.0.0'
 Author='Oisin Mulvihill'
