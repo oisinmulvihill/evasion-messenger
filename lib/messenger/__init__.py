@@ -42,6 +42,7 @@ from eventutils import reply
 from eventutils import send_await
 from eventutils import wait_for_event
 from eventutils import EventTimeout
+from eventutils import Catcher
 
 
 
