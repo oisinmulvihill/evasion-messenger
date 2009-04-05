@@ -30,8 +30,11 @@ needed = [
     'simplejson',
     'stomper',
     'pydispatcher',
-    'twisted', 
 ]
+
+import sys
+if not sys.platform.startswith('win'):
+    needed.append('twisted')
 
 # Include everything under viewpoint. I needed to add a __init__.py
 # to each directory inside viewpoint. I did this using the following
