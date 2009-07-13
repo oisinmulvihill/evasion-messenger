@@ -181,6 +181,7 @@ class XulControlProtocol(Protocol):
 
 class XulControlClientFactory(ReconnectingClientFactory):
 
+    maxDelay = 2
     
     def buildProtocol(self, addr):
         return XulControlProtocol()
@@ -197,7 +198,8 @@ class XulControlClientFactory(ReconnectingClientFactory):
         """Connection failed? Keep trying until we can get through.
         """
         get_log().info('Connection Failed. Reason: %s' % reason)
-        connector.connect()
+        # http://twistedmatrix.com/documents/8.2.0/api/twisted.internet.protocol.ReconnectingClientFactory.html
+        self.retry(connector)
 
 
 def setup(config):

@@ -334,6 +334,8 @@ class StompProtocol(Protocol, stomper.Engine):
 
 class StompClientFactory(ReconnectingClientFactory):
     
+    maxDelay = 2
+
     # Will be set up before the factory is created.
     username, password, destination = '', '', DESTINATION
     
@@ -352,6 +354,7 @@ class StompClientFactory(ReconnectingClientFactory):
         """Connection failed
         """
         get_log().info('Connection Failed. Reason: %s' % reason)
+        # http://twistedmatrix.com/documents/8.2.0/api/twisted.internet.protocol.ReconnectingClientFactory.html
         ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
 
 
