@@ -20,7 +20,6 @@ import stomper
 from stomper import stompbuffer
 from pydispatch import dispatcher
 from twisted.protocols import basic
-from twisted.internet import reactor
 from twisted.internet import threads
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 
@@ -225,6 +224,8 @@ class StompProtocol(Protocol, stomper.Engine):
         message = msg['body']
 
         def handle(event, testingCallback):
+            from twisted.internet import reactor
+            
             if testingCallback:
                 # Pass over the event for testing.
                 testingCallback(event)                
@@ -268,6 +269,8 @@ class StompProtocol(Protocol, stomper.Engine):
         Note: if data is None or empty then nothing will be sent.
         
         """
+        from twisted.internet import reactor
+
         if data:
             # transport.write in this situation as its not thread safe.
             # Therefore I must do this write in the same thread as the

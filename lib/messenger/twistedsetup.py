@@ -24,8 +24,8 @@ import xulcontrolprotocol
 
 def quit():
     """Tell the twisted reactor to quit."""
+    from twisted.internet import reactor
     try:
-        from twisted.internet import reactor
         reactor.stop()
     except:
         pass
