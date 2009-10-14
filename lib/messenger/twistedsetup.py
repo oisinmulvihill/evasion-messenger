@@ -17,10 +17,27 @@ def get_log():
     return logging.getLogger("messenger.twistedsetup")
 
 
-import stompprotocol
-import xulcontrolprotocol
+ok = False
+retry = 100
+import socket
+while retry:
+	try:
+		import stompprotocol
+		import xulcontrolprotocol
+	except socket.error, e:
+		# ignore the twisted error and keep importing until it works.
+		# This is a windows error
+		pass	
+	else:
+		ok = True
+		break
+	retry -= 1
 
+	
+if not ok:
+	raise
 
+	
 
 def quit():
     """Tell the twisted reactor to quit."""
