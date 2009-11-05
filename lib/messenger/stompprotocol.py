@@ -5,7 +5,6 @@ between pydispatcher's to/from remote systems.
 Oisin Mulvihill
 2007-07-27
 
-
 """
 import thread
 import pprint
@@ -393,8 +392,20 @@ def setup(config):
 
     # Must come before reactor import:
     import twistedsetup
-    # Can't include this globally as it affects the selector install
-    from twisted.internet import reactor
+    import socket
+
+    # Stop twisted import barfing on windows, from stopping 
+    # the app from starting. In effect keep importing until
+    # it works. It usually will after the 2-3 attempt.
+    #    
+    while true:
+        # Can't include this globally as it affects the selector install
+        try:
+            from twisted.internet import reactor
+        except socket.error, e:
+            pass
+        else:
+            break
     
     reactor.connectTCP(config['host'], config['port'], StompClientFactory())    
 
