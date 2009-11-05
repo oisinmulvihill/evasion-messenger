@@ -398,7 +398,7 @@ def setup(config):
     # the app from starting. In effect keep importing until
     # it works. It usually will after the 2-3 attempt.
     #    
-    while true:
+    while True:
         # Can't include this globally as it affects the selector install
         try:
             from twisted.internet import reactor
