@@ -156,7 +156,7 @@ class StompProtocol(Protocol, stomper.Engine):
         elif signal.remoteForwarded:
             # This avoid message cascade. We don't forward events
             # as the message broker takes care of this. 
-            get_log().debug("Not forwarding on to remote dispatchers (Remote dispatcher event received): %s" % signal.eid)
+            #get_log().debug("Not forwarding on to remote dispatchers (Remote dispatcher event received): %s" % signal.eid)
             return 
 
         elif signal.localOnly:
