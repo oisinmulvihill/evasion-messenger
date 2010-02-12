@@ -66,11 +66,12 @@ class StompProtocol(Protocol, stomper.Engine):
     length limit.
     
     """
-    def __init__(self, username='', password='', destination=DESTINATION):
+    def __init__(self, username='', password='', destination=DESTINATION, connectedOkHandler=None):
         stomper.Engine.__init__(self)
         self.destination = destination
         self.username = username
         self.password = password
+        self.connectedOkHandler = connectedOkHandler
         self.stompBuffer = stompbuffer.StompBuffer()
 
 
@@ -107,8 +108,18 @@ class StompProtocol(Protocol, stomper.Engine):
         f.headers['destination'] = self.destination
         # ActiveMQ specific header: Prevent the messages we send comming back to us.
         f.headers['activemq.noLocal'] = 'true'
+
+        if self.connectedOkHandler:
+            # Don't block twisted calling the connected ok handler.
+            def _callback(ignore=0):
+                try:
+                    self.connectedOkHandler()
+                except:
+                    get_log().exception("connectedOkHandler '%s' blew up when called - " % self.connectedOkHandler)
+            thread.start_new_thread(_callback, (0,))
         
         return f.pack()
+
 
 
     def wrapAndSend(self, signal, sender, **kw):
@@ -341,8 +352,17 @@ class StompClientFactory(ReconnectingClientFactory):
     # Will be set up before the factory is created.
     username, password, destination = '', '', DESTINATION
     
+    # If set this will be called when the stomp protcol is
+    # connected to the broker and subscribed
+    connectedOkHandler = None
+    
     def buildProtocol(self, addr):
-        return StompProtocol(self.username, self.password, self.destination)
+        return StompProtocol(
+            self.username, 
+            self.password, 
+            self.destination, 
+            self.connectedOkHandler,
+        )
     
     
     def clientConnectionLost(self, connector, reason):
@@ -360,7 +380,7 @@ class StompClientFactory(ReconnectingClientFactory):
         ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
 
 
-def setup(config):
+def setup(config, connectedOkHandler=None):
     """Configure the STOMP Broker connection protocol factory.
     
     config = {
@@ -380,6 +400,7 @@ def setup(config):
   
     StompClientFactory.username = config['username']
     StompClientFactory.password = config['password']
+    StompClientFactory.connectedOkHandler = connectedOkHandler
 
     # The destination MUST start with /topic/..
     #
