@@ -86,6 +86,8 @@ class StompProtocol(Protocol, stomper.Engine):
     def connected(self, msg):
         """Once I've connected I want to subscribe to message queue.
         """
+        from twisted.internet import reactor
+        
         stomper.Engine.connected(self, msg)
 
         get_log().info("Connected: session %s." % msg['headers']['session'])
@@ -111,12 +113,12 @@ class StompProtocol(Protocol, stomper.Engine):
 
         if self.connectedOkHandler:
             # Don't block twisted calling the connected ok handler.
-            def _callback(ignore=0):
+            def _callback():
                 try:
                     self.connectedOkHandler()
                 except:
-                    get_log().exception("connectedOkHandler '%s' blew up when called - " % self.connectedOkHandler)
-            thread.start_new_thread(_callback, (0,))
+                    get_log().exception("connectedOkHandler '%s' blew up when called - " % self.connectedOkHandler)                    
+            reactor.callInThread(_callback)
         
         return f.pack()
 
