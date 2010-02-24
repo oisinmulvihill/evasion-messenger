@@ -145,9 +145,10 @@ class MessengerWrapper(Runnable):
             # Capture the exception to raise it in the main thread.
             self.error = sys.exc_info()
 
-        finally:
-            # Exit cleanly no matter what.
-            quit()
+        # not py24 friendly :(
+        #finally:
+        # Exit cleanly no matter what.
+        quit()
 
 
 def message_main(testcase, func, cfg):
