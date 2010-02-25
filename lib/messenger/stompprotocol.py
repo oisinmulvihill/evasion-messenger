@@ -6,10 +6,8 @@ Oisin Mulvihill
 2007-07-27
 
 """
-import thread
 import pprint
 import pickle
-import thread
 import base64
 import logging
 
