@@ -7,7 +7,7 @@ Oisin Mulvihill
 
 """
 import pprint
-import pickle
+import cPickle as pickle
 import base64
 import logging
 
