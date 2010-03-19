@@ -34,7 +34,7 @@ needed = [
 
 import sys
 if not sys.platform.startswith('win'):
-    needed.append('twisted')
+    needed.append('twisted==8.2.0')
 
 # Include everything under viewpoint. I needed to add a __init__.py
 # to each directory inside viewpoint. I did this using the following
