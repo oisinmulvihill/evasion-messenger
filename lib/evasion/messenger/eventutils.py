@@ -13,11 +13,11 @@ import threading
 from pydispatch import dispatcher
 
 
-import messenger
+from evasion import messenger
 
 
 def get_log():
-    return logging.getLogger("messenger.eventutils")
+    return logging.getLogger("evasion.messenger.eventutils")
 
 
 class EventTimeout(Exception):

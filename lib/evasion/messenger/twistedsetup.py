@@ -14,7 +14,7 @@ threadable.init(1)
 
 
 def get_log():
-    return logging.getLogger("messenger.twistedsetup")
+    return logging.getLogger("evasion.messenger.twistedsetup")
 
 
 ok = False
@@ -22,8 +22,8 @@ retry = 100
 import socket
 while retry:
 	try:
-		import stompprotocol
-		import xulcontrolprotocol
+		from evasion.twistedsetup import stompprotocol
+        from evasion.twistedsetup import xulcontrolprotocol
 	except socket.error, e:
 		# ignore the twisted error and keep importing until it works.
 		# This is a windows error

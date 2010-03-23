@@ -85,10 +85,11 @@ parser.add_option("--logconfig", action="store", dest="logconfig", default="clil
                   help="Logger configuration to use")
 (options, args) = parser.parse_args()
 
-import messenger
+from evasion import messenger
 
 if os.path.isfile(options.logconfig):
     logging.config.fileConfig(options.logconfig)
+    
 else:
     # Set up stdout logging:
     from director import utils

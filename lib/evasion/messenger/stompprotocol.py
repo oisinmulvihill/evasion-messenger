@@ -21,11 +21,11 @@ from twisted.internet import threads
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 
 
-import messenger
+from evasion import messenger
 
 
 def get_log():
-    return logging.getLogger("messenger.stompprotocol")
+    return logging.getLogger("evasion.messenger.stompprotocol")
 
 
 # A common destination for for messages used across clients:
@@ -412,8 +412,8 @@ def setup(config, connectedOkHandler=None):
     StompClientFactory.destination = '/topic/%s' % (config['channel'])
 
     # Must come before reactor import:
-    import twistedsetup
     import socket
+    from evasion.messenger import twistedsetup
 
     # Stop twisted import barfing on windows, from stopping 
     # the app from starting. In effect keep importing until

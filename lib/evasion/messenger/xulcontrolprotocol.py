@@ -20,11 +20,11 @@ from pydispatch import dispatcher
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 
 
-import messenger
+from evasion import messenger
 
 
 def get_log():
-    return logging.getLogger("messenger.xulcontrolprotocol")
+    return logging.getLogger("evasion.messenger.xulcontrolprotocol")
 
 
 
@@ -212,7 +212,7 @@ def setup(config):
     
     """
     # Must come before reactor import:
-    import twistedsetup
+    from evasion.messenger import twistedsetup
     # Can't include this globally as it affects the selector install
     from twisted.internet import reactor
     

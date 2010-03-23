@@ -24,13 +24,13 @@ import logging
 import traceback
 import threading
 
-import stompprotocol
-from twistedsetup import run
-from twistedsetup import quit
+from evasion import stompprotocol
+from evasion.twistedsetup import run
+from evasion.twistedsetup import quit
 
 
 def get_log():
-    return logging.getLogger('messenger.testing')
+    return logging.getLogger('evasion.messenger.testing')
 
 
 class MessageMainTimeout(Exception):    

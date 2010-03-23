@@ -12,7 +12,7 @@ import unittest
 import stomper
 from pydispatch import dispatcher
 
-import messenger
+from evasion import messenger
 
 # Short circuit the twisted code for testing. NOT for production use!!
 messenger.stompprotocol.TESTING_ACTIVE = True

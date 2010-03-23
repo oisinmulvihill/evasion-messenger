@@ -26,7 +26,7 @@ import logging
 import threading
 
 def get_log():
-    return logging.getLogger("messenger")
+    return logging.getLogger("evasion.messenger")
 
 
 import eventutils

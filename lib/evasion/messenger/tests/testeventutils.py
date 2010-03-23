@@ -13,7 +13,7 @@ import threading
 
 from pydispatch import dispatcher
 
-import messenger
+from evasion import messenger
 
 
 class SignalHelper(object):
