@@ -20,11 +20,11 @@ License=''
 ShortDescription=Summary
 
 # Recover the ReStructuredText docs:
-fd = file("lib/messenger/docs/messenger.stx")
+fd = file("lib/evasion/messenger/docs/messenger.stx")
 Description=fd.read()
 fd.close()
 
-TestSuite = 'messenger.tests'
+TestSuite = 'evasion.messenger.tests'
 
 needed = [
     'simplejson',
@@ -71,4 +71,5 @@ setup(
     package_data=PackageData,
     package_dir = {'': 'lib'},
     eager_resources = EagerResources,
+    namespace_packages = ['evasion'],
 )
