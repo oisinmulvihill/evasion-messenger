@@ -45,6 +45,7 @@ if not sys.platform.startswith('win'):
 # If new directories are added then I'll need to rerun this command.
 #
 EagerResources = [
+    'evasion',
 ]
 
 ProjectScripts = [

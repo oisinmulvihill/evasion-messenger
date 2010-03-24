@@ -29,21 +29,21 @@ def get_log():
     return logging.getLogger("evasion.messenger")
 
 
-import eventutils
-import twistedsetup
-import stompprotocol
-import xulcontrolprotocol
-from events import Event as EVT
-from events import LocalEvent as LEVT
-from events import ReplyEvent as REVT
+from evasion.messenger import eventutils
+from evasion.messenger import twistedsetup
+from evasion.messenger import stompprotocol
+from evasion.messenger import xulcontrolprotocol
+from evasion.messenger.events import Event as EVT
+from evasion.messenger.events import LocalEvent as LEVT
+from evasion.messenger.events import ReplyEvent as REVT
 
-from eventutils import send
-from eventutils import reply
-from eventutils import send_await
-from eventutils import wait_for_event
-from eventutils import EventTimeout
-from eventutils import Catcher
-from testing import Runnable
+from evasion.messenger.eventutils import send
+from evasion.messenger.eventutils import reply
+from evasion.messenger.eventutils import send_await
+from evasion.messenger.eventutils import wait_for_event
+from evasion.messenger.eventutils import EventTimeout
+from evasion.messenger.eventutils import Catcher
+from evasion.messenger.testing import Runnable
 
 
 
