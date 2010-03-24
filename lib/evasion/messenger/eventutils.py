@@ -13,7 +13,7 @@ import threading
 from pydispatch import dispatcher
 
 
-from evasion import messenger
+from evasion.messenger import events
 
 
 def get_log():
@@ -49,7 +49,7 @@ class Catcher(object):
 
         
         """
-        if not isinstance(event, messenger.EVT):
+        if not isinstance(event, events.EVT):
             raise ValueError("Only messenger events can be used with the Catcher class!")
 
         self.timeout = timeout
@@ -78,7 +78,7 @@ class Catcher(object):
         """
 #        print "replyEventReceiver: ", signal, sender, data
 
-        if isinstance(signal, messenger.EVT):
+        if isinstance(signal, events.EVT):
             # Only messenger event can be counted for replies from
             # a send and await.
             #
@@ -203,13 +203,13 @@ def send_await(event, data="", timeout=120):
         function response data, etc.
     
     """
-    if not isinstance(event, messenger.EVT):
+    if not isinstance(event, events.EVT):
         raise ValueError("Only messenger events can be used with wait_for_event!")
 
     #get_log().debug("1. send_await: our reply address - %s" % event.uid)
     
     # Set up the reply event connection first so we don't miss it.
-    c = Catcher(messenger.REVT(event.uid), timeout, reply=True)
+    c = Catcher(events.REVT(event.uid), timeout, reply=True)
 
     #get_log().debug("2. Ready for reply. Sending and waiting. ")
     
@@ -240,7 +240,7 @@ def wait_for_event(event, timeout=120):
     }
     
     """
-    if not isinstance(event, messenger.EVT):
+    if not isinstance(event, events.EVT):
         raise ValueError("Only messenger events can be used with wait_for_event!")
     
     #get_log().debug("wait_for_event: waiting for (%s)." % (event))
@@ -258,8 +258,8 @@ def send(event, data):
     then this is used unchanged.
     
     """
-    if not isinstance(event, messenger.EVT):
-        event = messenger.EVT(event)
+    if not isinstance(event, events.EVT):
+        event = events.EVT(event)
 
     dispatcher.send(
         event,
@@ -284,10 +284,10 @@ def reply(event, data=""):
     then this is used unchanged.
     
     """
-    if not isinstance(event, messenger.EVT):
+    if not isinstance(event, events.EVT):
         raise ValueError("Only messenger events can be replied to!")
 
-    reply_evt = messenger.REVT(event.uid)
+    reply_evt = events.REVT(event.uid)
 
     #get_log().debug("reply: sending reply (%s) for (%s)." % (reply_evt, event))
 
@@ -297,3 +297,6 @@ def reply(event, data=""):
     )
     
     #get_log().debug("reply: DONE sending reply (%s) for (%s)." % (reply_evt, event))
+
+    
+

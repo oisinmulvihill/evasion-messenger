@@ -84,7 +84,10 @@ class Event(str):
 
         # Return the new instance:
         return newstr
-    
+
+# Shorthand for classes
+EVT = Event        
+        
 
 
 class LocalEvent(Event):
@@ -100,6 +103,8 @@ class LocalEvent(Event):
         """
         return Event.__new__(cls, eid, local_only=True, remote_forwarded=remote_forwarded)
 
+# Shorthand for classes
+LEVT = LocalEvent        
 
 
 class ReplyEvent(Event):
@@ -125,4 +130,9 @@ class ReplyEvent(Event):
         evt.replyto = replyto
         
         return evt
+
+# Shorthand for classes
+REVT = ReplyEvent        
+
+
 

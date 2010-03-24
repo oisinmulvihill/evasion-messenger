@@ -21,17 +21,17 @@ ok = False
 retry = 100
 import socket
 while retry:
-	try:
-		from evasion.twistedsetup import stompprotocol
-        from evasion.twistedsetup import xulcontrolprotocol
-	except socket.error, e:
-		# ignore the twisted error and keep importing until it works.
-		# This is a windows error
-		pass	
-	else:
-		ok = True
-		break
-	retry -= 1
+    try:
+        from evasion.messenger import stompprotocol
+        from evasion.messenger import xulcontrolprotocol
+    except socket.error, e:
+        # ignore the twisted error and keep importing until it works.
+        # This is a windows error
+        pass	
+    else:
+        ok = True
+        break
+    retry -= 1
 
 	
 if not ok:

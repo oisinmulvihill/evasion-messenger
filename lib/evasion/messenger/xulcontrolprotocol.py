@@ -20,7 +20,7 @@ from pydispatch import dispatcher
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 
 
-from evasion import messenger
+from evasion.messenger import events
 
 
 def get_log():
@@ -106,7 +106,7 @@ class XulControlProtocol(Protocol):
         try:
             # dump control frame ready for transmission:
             get_log().info("wrapAndSend: packing ")
-            if not isinstance(signal, messenger.EVT):
+            if not isinstance(signal, events.EVT):
                 # No reply is expected.
                 replyto = ''
             else:
@@ -168,7 +168,7 @@ class XulControlProtocol(Protocol):
                     def do_send():
                         get_log().debug("Dispatching reply event <%s>.")
                         dispatcher.send(
-                            signal = messenger.REVT(data['replyto']),
+                            signal = events.REVT(data['replyto']),
                             data = data['data']
                         )
                     

@@ -21,7 +21,7 @@ from twisted.internet import threads
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 
 
-from evasion import messenger
+from evasion.messenger import events
 
 
 def get_log():
@@ -159,7 +159,7 @@ class StompProtocol(Protocol, stomper.Engine):
         # I also don't forward events which aren't from the 
         # messenger.events module.
         #
-        if not isinstance(signal, messenger.EVT):
+        if not isinstance(signal, events.EVT):
             # This is not a messenger event, don't forward it.
             get_log().debug("Not forwarding (Not a messenger event, just a pydispatch event): %s" % pprint.pformat(signal))
             return

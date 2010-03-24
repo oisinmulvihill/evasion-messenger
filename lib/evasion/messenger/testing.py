@@ -24,9 +24,9 @@ import logging
 import traceback
 import threading
 
-from evasion import stompprotocol
-from evasion.twistedsetup import run
-from evasion.twistedsetup import quit
+from evasion.messenger import stompprotocol
+from evasion.messenger.twistedsetup import run
+from evasion.messenger.twistedsetup import quit
 
 
 def get_log():
