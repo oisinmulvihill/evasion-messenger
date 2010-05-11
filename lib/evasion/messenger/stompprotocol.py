@@ -66,6 +66,7 @@ class StompProtocol(Protocol, stomper.Engine):
     """
     def __init__(self, username='', password='', destination=DESTINATION, connectedOkHandler=None):
         stomper.Engine.__init__(self)
+        self.log = logging.getLogger('evasion.messenger.stompprotocol.StompProtocol')
         self.destination = destination
         self.username = username
         self.password = password
@@ -88,7 +89,7 @@ class StompProtocol(Protocol, stomper.Engine):
         
         stomper.Engine.connected(self, msg)
 
-        get_log().info("Connected: session %s." % msg['headers']['session'])
+        self.log.info("Connected: session %s." % msg['headers']['session'])
 
         # Register the protocol to recieve all events and route them
         # on to the other dispatchers connected to the messenging
@@ -98,10 +99,10 @@ class StompProtocol(Protocol, stomper.Engine):
             signal = dispatcher.Any,
             sender = dispatcher.Any,
         )
-        get_log().info("Connected: connected wrapAndSend for all signals.")
+        self.log.info("Connected: connected wrapAndSend for all signals.")
 
         # Register for messages from other dispatchers:
-        get_log().info("Connected: subscribing to <%s>." % self.destination)
+        self.log.info("Connected: subscribing to <%s>." % self.destination)
 
         f = stomper.Frame()
         f.cmd = "SUBSCRIBE"
@@ -115,7 +116,7 @@ class StompProtocol(Protocol, stomper.Engine):
                 try:
                     self.connectedOkHandler()
                 except:
-                    get_log().exception("connectedOkHandler '%s' blew up when called - " % self.connectedOkHandler)                    
+                    self.log.exception("connectedOkHandler '%s' blew up when called - " % self.connectedOkHandler)                    
             reactor.callInThread(_callback)
         
         return f.pack()
@@ -150,7 +151,7 @@ class StompProtocol(Protocol, stomper.Engine):
         send method takes care of this.
         
         """
-        #get_log().debug("Trying to forward signal: %s" % str((signal, sender)))
+        #self.log.debug("Trying to forward signal: %s" % str((signal, sender)))
 
         # Ignore events we dispatched or events specifically
         # marked not to forward. We don't forward events as it
@@ -161,18 +162,18 @@ class StompProtocol(Protocol, stomper.Engine):
         #
         if not isinstance(signal, events.EVT):
             # This is not a messenger event, don't forward it.
-            get_log().debug("Not forwarding (Not a messenger event, just a pydispatch event): %s" % pprint.pformat(signal))
+            #self.log.debug("Not forwarding (Not a messenger event, just a pydispatch event): %s" % pprint.pformat(signal))
             return
 
         elif signal.remoteForwarded:
             # This avoid message cascade. We don't forward events
             # as the message broker takes care of this. 
-            #get_log().debug("Not forwarding on to remote dispatchers (Remote dispatcher event received): %s" % signal.eid)
+            #self.log.debug("Not forwarding on to remote dispatchers (Remote dispatcher event received): %s" % signal.eid)
             return 
 
         elif signal.localOnly:
             # Don't send this event remotely, the user doesn't want it to be.
-            get_log().debug("Not forwarding (Local Event to this dispatcher): %s" % signal.eid)
+            #self.log.debug("Not forwarding (Local Event to this dispatcher): %s" % signal.eid)
             return
             
 
@@ -196,10 +197,10 @@ class StompProtocol(Protocol, stomper.Engine):
             #
             f.body = dump(out)
             message = f.pack()
-            #get_log().debug("wrapAndSend: forwarding message for signal '%s' - '%s'." % (signal, message))
+            #self.log.debug("wrapAndSend: forwarding message for signal '%s' - '%s'." % (signal, message))
             
         except:
-            get_log().exception("wrapAndSend: Unable to pickle the: %s - " % out)
+            self.log.exception("wrapAndSend: Unable to pickle the: %s - " % out)
             
         else:
             # send out the event to remote dispatchers:
@@ -242,7 +243,7 @@ class StompProtocol(Protocol, stomper.Engine):
             else:
                 # Send as if it was from the dispatcher running in this system.
                 def do_send(evt):
-                    #get_log().debug("Dispatching remote received event <%s> (%s) locally." % (evt['signal'], evt['signal'].eid))
+                    #self.log.debug("Dispatching remote received event <%s> (%s) locally." % (evt['signal'], evt['signal'].eid))
                     dispatcher.send(
                         signal = evt['signal'],
                         sender = evt['sender'],
@@ -250,7 +251,7 @@ class StompProtocol(Protocol, stomper.Engine):
                     )                    
                 # Don't block the event loop, run it in a thread.              
                 if TESTING_ACTIVE:
-                    get_log().warn("TESTING: handing to thread for further processing - %s" % event['signal'])
+                    #self.log.warn("TESTING: handing to thread for further processing - %s" % event['signal'])
                     thread.start_new_thread(do_send, (event,))
                     
                 else:
@@ -262,7 +263,7 @@ class StompProtocol(Protocol, stomper.Engine):
                 # Undo transmission protection and recover the event dict:
                 event = load(message)
             except:
-                get_log().exception("Unable to unpickle the: \"%s\" - " % message)
+                self.log.exception("Unable to unpickle the: \"%s\" - " % message)
                 
             else:
                 # Don't forward the event we've received:
@@ -287,30 +288,30 @@ class StompProtocol(Protocol, stomper.Engine):
             # reactor is running. To do this I must use reactor.callFromThread
             if not TESTING_ACTIVE:
                 def write(data):
-                    #get_log().info('dataSend (live mode from reactor thread): data %s' % data)
+                    #self.log.info('dataSend (live mode from reactor thread): data %s' % data)
                     self.transport.write(data)
-                    #get_log().info('dataSend data ADDED to buffer')
+                    #self.log.info('dataSend data ADDED to buffer')
 
-                #get_log().info('dataSend: calling write() in thread')
+                #self.log.info('dataSend: calling write() in thread')
                 reactor.callFromThread(write, data)
-                #get_log().info('dataSend: started write()')
+                #self.log.info('dataSend: started write()')
                 
             else:
                 # Unit test use ONLY, not for production!!
-                get_log().warn('dataSend (unit testing mode): data %s' % data)
+                self.log.warn('dataSend (unit testing mode): data %s' % data)
                 self.transport.write(data) # leave it like this for unittests and don't use self.sendLine(data)
                 
 
     def dataReceived(self, data):
         """Use stompbuffer to determine when a complete message has been received. 
         """
-        #get_log().info('dataReceived: data chunk %s' % data)
+        #self.log.info('dataReceived: data chunk %s' % data)
         self.stompBuffer.appendData(data)
 
         while True:
             msg = self.stompBuffer.getOneMessage()        
             if msg:
-                #get_log().info('dataReceived: message %s' % msg)            
+                #self.log.info('dataReceived: message %s' % msg)            
                 action_id = str(uuid.uuid4())
 
                 # This is run from a thread to perform whatever blocking
@@ -318,7 +319,7 @@ class StompProtocol(Protocol, stomper.Engine):
                 def action_stations(msg):
                     # data here should be a frame compatible dict 
                     # as returned by getOneMessage()
-                    #get_log().info('dataReceived action_stations: data frame %s' % msg)
+                    #self.log.info('dataReceived action_stations: data frame %s' % msg)
                     result = self.react(msg)
                     return result
 
@@ -326,13 +327,13 @@ class StompProtocol(Protocol, stomper.Engine):
                 # has determined what is to be returned.
                 def ok(resultant_msg):
                     if resultant_msg:
-                        #get_log().info('dataReceived ok: sending resultant_msg %s' % resultant_msg)
+                        #self.log.info('dataReceived ok: sending resultant_msg %s' % resultant_msg)
                         self.dataSend(resultant_msg)
-                        #get_log().info('dataReceived ok: DONE')
+                        #self.log.info('dataReceived ok: DONE')
 
                 def fail(failure, *args):
                     msg = "failure:\n%s, %s\n%s" % (failure.type, failure.getErrorMessage(), failure.getTraceback())
-                    get_log().error("action_stations (%s) FAIL: reaction FAIL - %s " % (action_id, msg))
+                    self.log.error("action_stations (%s) FAIL: reaction FAIL - %s " % (action_id, msg))
 
                 # Run method in thread and get result as defer.Deferred
                 d = threads.deferToThread(action_stations, msg)
