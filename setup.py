@@ -18,11 +18,7 @@ Maintainer=' Oisin Mulvihill'
 Summary='Messaging library used to package and delivery events'
 License=''
 ShortDescription=Summary
-
-# Recover the ReStructuredText docs:
-fd = file("lib/evasion/messenger/docs/messenger.stx")
-Description=fd.read()
-fd.close()
+Description=Summary
 
 TestSuite = 'evasion.messenger.tests'
 
