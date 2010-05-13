@@ -16,7 +16,7 @@ Author='Oisin Mulvihill'
 AuthorEmail='oisinmulvihill at gmail dot com'
 Maintainer=' Oisin Mulvihill'
 Summary='Messaging library used to package and delivery events'
-License=''
+License='Evasion Project CDDL License'
 ShortDescription=Summary
 Description=Summary
 
