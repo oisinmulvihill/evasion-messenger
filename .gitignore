@@ -1,0 +1,13 @@
+.bzr*
+dist*
+docs/build*
+build*
+*.egg-info*
+*.pyc
+*.DS_Store*
+*.log
+*.db
+.coverage
+data
+paver-minilib.zip
+
