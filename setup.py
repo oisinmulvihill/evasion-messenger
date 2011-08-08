@@ -10,8 +10,8 @@ Oisin Mulvihill
 from setuptools import setup, find_packages
 
 Name='evasion-messenger'
-ProjecUrl="" #""
-Version='1.0.0'
+ProjecUrl="http://github.com/oisinmulvihill/evasion-messenger/tarball/master#egg=evasion_messenger"
+Version='1.1.0dev'
 Author='Oisin Mulvihill'
 AuthorEmail='oisinmulvihill at gmail dot com'
 Maintainer=' Oisin Mulvihill'

@@ -27,17 +27,17 @@ while retry:
     except socket.error, e:
         # ignore the twisted error and keep importing until it works.
         # This is a windows error
-        pass	
+        pass
     else:
         ok = True
         break
     retry -= 1
 
-	
-if not ok:
-	raise
 
-	
+if not ok:
+    raise
+
+
 
 def quit():
     """Tell the twisted reactor to quit."""
@@ -59,7 +59,7 @@ class Run(object):
     is called isExit. This function returns True when
     it is time for the appmain to exit. All other
     times it returns False.
-    
+
     """
     def __init__(self, appmain, kwargs={}):
         self.__foreign_exit_time = threading.Event()
@@ -69,18 +69,21 @@ class Run(object):
     def foreignEventLoopStop(self):
         """Called by twisted when its time to stop the thread"""
         self.__foreign_exit_time.set()
-    
+
     def isExit(self):
         """Called by the appmain to determine if its time to exit"""
         return self.__foreign_exit_time.isSet()
 
 
-    def _exitOneError(self, data):
+    def _exitOneError(self, **data):
         """Wrap the func call so that if it raises an exception I
         catch this, then stop twisted reraising the error.
         """
         try:
             self.main(self.isExit, **self.kwargs)
+        except KeyboardInterrupt, e:
+            print("Ctrl-C")
+            quit()
         except:
             # Can't include this globally as it affects the selector install
             quit()
@@ -88,8 +91,10 @@ class Run(object):
 
     def start(self):
         """This is called to start the appmain in its own thread."""
-        thread.start_new_thread(self._exitOneError, (0,))
-    
+        from twisted.internet import reactor
+        reactor.callInThread(self._exitOneError)
+        #thread.start_new_thread(self._exitOneError, (0,))
+
 
 
 # Must come before reactor import:
@@ -100,14 +105,14 @@ def run(appmain=None, **kwargs):
     """Start twisted event loop and the fun should begin...
 
     appmain:
-        This is the programs mainloop that twisted will 
-        run inside a thread, to prevent it blocking 
+        This is the programs mainloop that twisted will
+        run inside a thread, to prevent it blocking
         twisted.
 
     **kwargs:
         These are any arguments your wished passed to to the
         appmain function at run time.
-           
+
     """
     from twisted.internet import reactor
 
@@ -116,11 +121,7 @@ def run(appmain=None, **kwargs):
         __runner = Run(appmain, kwargs)
         __runner.start()
         reactor.addSystemEventTrigger('after', 'shutdown', __runner.foreignEventLoopStop)
-    
-    reactor.run(installSignalHandlers=0)
-    
-
-
-   
-    
-
+        try:
+            reactor.run(installSignalHandlers=0)
+        except KeyboardInterrupt, e:
+            quit()
