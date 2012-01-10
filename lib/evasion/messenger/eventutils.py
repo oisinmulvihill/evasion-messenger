@@ -13,7 +13,7 @@ import threading
 from pydispatch import dispatcher
 
 
-from evasion.messenger import events
+from . import events
 
 
 def get_log():
@@ -30,7 +30,7 @@ class Catcher(object):
     """
     def __init__(self, event, timeout, reply=False):
         """Setup the catcher ready to roll.
-        
+
         event:
             This is the messenger event we are waiting
             to receive, depending on the method call
@@ -47,7 +47,7 @@ class Catcher(object):
             This indicates that a reply is required
             for a sendAndWait. If this is false the
 
-        
+
         """
         if not isinstance(event, events.EVT):
             raise ValueError("Only messenger events can be used with the Catcher class!")
@@ -58,7 +58,7 @@ class Catcher(object):
         self.event = dict(signal='', sender='', data='')
         self.disconnectFunc = None
         self.reply = reply
-       
+
         if self.reply:
             # Set up the reply sender event handler:
             self.replySender = self.evt.replyto
@@ -83,9 +83,9 @@ class Catcher(object):
             # a send and await.
             #
 #            print "signal.replyto:   ", signal.replyto
-#            print "self.replySender: ", self.replySender 
+#            print "self.replySender: ", self.replySender
 #            print
-            
+
             if signal.replyto == self.replySender:
                 # Got response:
                 self.eventCaught.set()
@@ -93,8 +93,8 @@ class Catcher(object):
                 self.event['sender'] = sender
                 self.event['data'] = data
                 self.eventCaught.set()
-            
-        
+
+
     def eventReceiver(self, signal, sender, **data):
         """This is the callback used as a catch all for the specific event.
         """
@@ -126,7 +126,7 @@ class Catcher(object):
         """
         if not self.reply:
             raise ValueError("The reply flag was not set in the constructor before using this method!")
-        
+
         # send the event:
         dispatcher.send(
             signal=event,
@@ -152,16 +152,16 @@ class Catcher(object):
             'sender' : '...',
             'data' : '...'
         }
-        
+
         """
         self.eventCaught.wait(self.timeout)
-        
+
         # Disconnect the event callback.
         try:
             dispatcher.disconnect(self.disconnectFunc)
         except dispatcher.errors.DispatcherKeyError, e:
             pass
-        
+
         if self.eventCaught.isSet():
             # we've got an event, hurragh!
             return self.event
@@ -169,7 +169,7 @@ class Catcher(object):
 
         raise EventTimeout("The event '%s' did not occur within the timeout '%s' (seconds)!" % (self.evt, self.timeout))
 
-    
+
 
 def send_await(event, data="", timeout=120):
     """Called to send an event and then wait for the response.
@@ -197,30 +197,30 @@ def send_await(event, data="", timeout=120):
     }
 
     NOTE:
-    
+
       response:
         This will contain what ever the reponder returns,
         function response data, etc.
-    
+
     """
     if not isinstance(event, events.EVT):
         raise ValueError("Only messenger events can be used with wait_for_event!")
 
     #get_log().debug("1. send_await: our reply address - %s" % event.uid)
-    
+
     # Set up the reply event connection first so we don't miss it.
     c = Catcher(events.REVT(event.uid), timeout, reply=True)
 
     #get_log().debug("2. Ready for reply. Sending and waiting. ")
-    
+
     evt = c.sendAndWait(event, data)
 
     #get_log().debug("3. send_await: received reply (%s) for event (%s)." % (evt, event.uid))
 
     return evt['data']
-    
-    
-    
+
+
+
 def wait_for_event(event, timeout=120):
     """Called to wait for a particular event to occur.
 
@@ -238,16 +238,16 @@ def wait_for_event(event, timeout=120):
         'sender' : '...',
         'data' : '...'
     }
-    
+
     """
     if not isinstance(event, events.EVT):
         raise ValueError("Only messenger events can be used with wait_for_event!")
-    
+
     #get_log().debug("wait_for_event: waiting for (%s)." % (event))
-    
+
     return Catcher(event, timeout).wait()
-    
-    
+
+
 
 def send(event, data):
     """This dispatches a string as a messenger event using the dispatcher.
@@ -256,7 +256,7 @@ def send(event, data):
 
     If the event is already and messenger event
     then this is used unchanged.
-    
+
     """
     if not isinstance(event, events.EVT):
         event = events.EVT(event)
@@ -282,7 +282,7 @@ def reply(event, data=""):
 
     If the event is already and messenger event
     then this is used unchanged.
-    
+
     """
     if not isinstance(event, events.EVT):
         raise ValueError("Only messenger events can be replied to!")
@@ -295,8 +295,5 @@ def reply(event, data=""):
         reply_evt,
         data=data
     )
-    
+
     #get_log().debug("reply: DONE sending reply (%s) for (%s)." % (reply_evt, event))
-
-    
-
