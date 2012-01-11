@@ -8,7 +8,7 @@ from evasion.messenger import hub
 from evasion.messenger import endpoint
 
 
-TIMEOUT = 30
+TIMEOUT = 15
 
 class CallBack(object):
     data = None
@@ -49,9 +49,15 @@ class Messenger(unittest.TestCase):
 
 
     def testPublistSubscribe(self):
-        """
+        """Test the publish-subscribe.
         """
         reg = endpoint.Register()
         my_cb = CallBack()
 
         reg.subscribe('tea_time', my_cb)
+        reg.publish('tea_time', dict(cake="sponge"))
+
+        my_cb.wait()
+        self.assertEquals()
+
+
