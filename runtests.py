@@ -3,11 +3,18 @@
 Use nosetests to run the unit tests for this project.
 
 """
-import os
 import sys
 import logging
 
 import nose
+
+log = logging.getLogger('evasion')
+hdlr = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+log.addHandler(hdlr)
+log.setLevel(logging.DEBUG)
+log.propagate = False
 
 sys.path.extend(["./lib",])
 

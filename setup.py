@@ -20,10 +20,8 @@ License='Evasion Project CDDL License'
 ShortDescription=Summary
 Description=Summary
 
-TestSuite = 'evasion.messenger.tests'
 
 needed = [
-    'pydispatcher',
     'pyzmq',
 ]
 
@@ -42,6 +40,11 @@ PackageData = {
     '': ['*.*'],
 }
 
+EntryPoints = """
+    [console_scripts]
+    messagehub = evasion.messenger.hub:main
+"""
+
 setup(
     url=ProjectUrl,
     name=Name,
@@ -52,9 +55,13 @@ setup(
     description=ShortDescription,
     long_description=Description,
     license=License,
-    test_suite=TestSuite,
     scripts=ProjectScripts,
     install_requires=needed,
+    setup_requires=[
+      'nose>=1.0.0',
+    ],
+    test_suite="nose.collector",
+    entry_points=EntryPoints,
     packages=find_packages('lib'),
     package_data=PackageData,
     package_dir = {'': 'lib'},

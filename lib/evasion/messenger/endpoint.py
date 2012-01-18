@@ -2,11 +2,13 @@
 """
 """
 import time
+import uuid
 import thread
 import logging
 import threading
 
 import zmq
+from zmq import ZMQError
 
 
 class Transceiver(object):
@@ -18,7 +20,7 @@ class Transceiver(object):
 
             config = dict(
                 incoming='tcp://*:15566', # default
-                outgoing='',
+                outgoing='tcp://*:15567',
                 idle_timeout=1000, # milliseconds:
             )
 
@@ -28,10 +30,10 @@ class Transceiver(object):
         self.exitTime = False
         self.context = zmq.Context()
 
-        self.incoming_uri = config.get("incoming", 'tcp://*:15566')
+        self.incoming_uri = config.get("incoming", 'tcp://localhost:15566')
         self.log.info("Recieving on <%s>" % self.incoming_uri)
 
-        self.outgoing_uri = config.get("outgoing", 'tcp://localhost:5567')
+        self.outgoing_uri = config.get("outgoing", 'tcp://localhost:15567')
         self.log.info("Sending on <%s>" % self.outgoing_uri)
 
         self.idle_timeout = int(config.get("idle_timeout", 2000))
@@ -40,9 +42,8 @@ class Transceiver(object):
         self.message_handler = message_handler
 
 
-
-    def start(self):
-        """Set up zmq communication and start receiving messages from the hub.
+    def main(self):
+        """Running the message receiving loop and on idletime check the exit flag.
         """
         self.exitTime = False
 
@@ -53,14 +54,26 @@ class Transceiver(object):
         self.poller = zmq.Poller()
         self.poller.register(self.incoming, zmq.POLLIN)
 
-        def _main(self):
-            while not self.exitTime:
+        while not self.exitTime:
+            try:
                 events = self.poller.poll(self.idle_timeout)
+
+            except ZMQError as e:
+                # 4 = 'Interrupted system call'
+                self.log.info("main: sigint or other signal interrupt, exit time <%s>" % e)
+
+            else:
                 if (events > 0):
                     msg = self.incoming.recv()
-                    self.messageIn(msg)
+                    self.message_in(msg)
 
-        time.start_new(_main, (0,))
+
+    def start(self):
+        """Set up zmq communication and start receiving messages from the hub.
+        """
+        def _main(notused):
+            self.main()
+        thread.start_new(_main, (0,))
 
 
     def stop(self):
@@ -69,29 +82,34 @@ class Transceiver(object):
         self.log.info("stop: shutting down messaging.")
         self.exitTime = True
         self.incoming.close()
-        # wait for the poller thread to timeout and exit.
-        self.log.info("stop: waiting for receiver shutdown...")
-        time.sleep(self.idle_timeout)
         self.log.info("stop: done.")
 
 
+    def message_out(self, message):
+        """This sends a message to the messagehub for dispatch to all connected
+        endpoints.
 
-    def messageOut(self, message):
-        """This implements the the DispatcherAdapter dataSend method.
-
-        This is called to send a captured pydispatch signal out for other
-        endpoints to receive. The interception of
+        :param message: A dictionary.
 
         """
         outgoing = self.context.socket(zmq.PUSH);
         outgoing.connect(self.outgoing_uri);
         outgoing.send(message)
         outgoing.close()
+        self.log.debug("message_out: sent to hub <%s>" % message)
 
 
-    def messageIn(self, message):
+    def message_in(self, message):
         """Called on receipt of an evasion frame to determine what to do.
+
+        The message_handler set in the constructer will be called if one
+        was set.
+
         """
+        if self.message_handler:
+            self.message_handler(message)
+        else:
+            self.log.debug("message_in: message <%s>" % message)
 
 
 
@@ -101,8 +119,9 @@ class Register(object):
     def __init__(self, config={}, transceiver=None):
         """
         """
+        self.source_uuid = str(uuid.uuid4())
         if not transceiver:
-            self.transceiver = Transceiver(config)
+            self.transceiver = Transceiver(config, self.message_handler)
         else:
             self.transceiver = transceiver
 
@@ -115,6 +134,24 @@ class Register(object):
 
     def stop(self):
         """
+        """
+
+    def message_handler(self, message):
+        """Called to handle a ZMQ Evasion message received.
+
+        :param message: This must be a message in the Evasion frame format.
+
+        For example::
+
+            'DISPATCH some_string {json object}'
+
+            json_object = json.dumps(dict(
+                event='some_string',
+                data={...}
+            ))
+
+        This will result in the publish being call
+
         """
 
 
@@ -153,10 +190,6 @@ class Register(object):
 
         """
 
-
-    def local_publish(self, signal, data, source=None):
-        """Called on receipt of a message from the messaging queue.
-        """
 
 
     def publish(self, signal, data, source=None):

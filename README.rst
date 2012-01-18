@@ -37,10 +37,13 @@ action to take based on the evasion frame
 Evasion Frames
 ~~~~~~~~~~~~~~
 
-This is a single ZMQ message which has a particular format. The format is
+This is a single message string which has a particular format. The format is
 defined as::
 
-"<message type> <payload>"
+"<message type> <process_uuid> <contents>"
+
+The <message type> is a string used to give meaning to what <contents> is for.
+The <process_uuid> is the id of the originating endpoint
 
 Further message types may format the payload. The following message types
 exist::
@@ -55,21 +58,20 @@ passed as an argument to any registered callbacks.
 
 For example::
 
-    'DISPATCH <signal string> {"source":"<uuid string>" or "", "data":{...}}'
+    'DISPATCH proc_uuid <signal string> {"reply_to":"<uuid string>" or "", "data":{...}}'
 
-    'DISPATCH door_open {"source":"", "data":{"a":1}}'
-    'DISPATCH stop_sound {"source":"<uuid>", "data":{}}'
+    'DISPATCH 3c14d4b7-3b88-4680-96d1-e367f051eef1 door_open {"reply_to":"", "data":{"a":1}}'
+    'DISPATCH 3c14d4b7-3b88-4680-96d1-e367f051eef1 stop_sound {"reply_to":"<uuid>", "data":{}}'
 
 DISPATCH_REPLY
 ``````````````
-
-This is a reply to a received signal. When signal is empty no reply is needed.
-If source is not empty the a reply is required. The source from the dispatch
-payload is used to return data to a sender waiting for a reply.
+This is a reply to a received signal. When reply_to is empty no reply is
+expected. If reply_to is not empty then a reply is required. The source from the
+DISPATCH payload is used to return data to a sender waiting for a reply.
 
 For example::
 
-  'DISPATCH_REPLY source_uuid {"a":1}'
+  'DISPATCH_REPLY proc_uuid reply_to_uuid {"a":1}'
 
 HUB_PRESENT
 ```````````
