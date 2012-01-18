@@ -13,17 +13,14 @@ log.setLevel(logging.DEBUG)
 log.propagate = False
 
 
-config = dict(
-)
-
-trans = endpoint.Transceiver(config)
-trans.start()
+config = dict()
+reg = endpoint.Register(config)
+reg.start()
 
 try:
     while True:
-        msg = "HELLO THERE"
-        trans.message_out(msg)
+        reg.publish('tea_time', dict(a=1))
         time.sleep(5)
 
 except KeyboardInterrupt:
-    trans.stop()
+    reg.stop()

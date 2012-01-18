@@ -110,7 +110,6 @@ class MessagingHub(object):
             self.wait_for_exit.set()
             self.log.info("main: Shutdown complete.")
 
-
         self.log.info("main: Mainloop running.")
         try:
             while not self.exitTime:
@@ -126,14 +125,14 @@ class MessagingHub(object):
                         raise e
                 else:
                     if (events):
-                        message = self.incoming.recv()
+                        message = self.incoming.recv_multipart()
                         log_message(message)
-                        self.dispatch.send(message)
+                        self.dispatch.send_multipart(message)
 
                     else:
                         if self.send_hub_present:
                             log_hub_present()
-                            self.dispatch.send(HUB_PRESENT)
+                            self.dispatch.send_multipart(HUB_PRESENT)
         finally:
             _shutdown()
 

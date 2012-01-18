@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 """
-import time
+import json
 import uuid
 import thread
 import logging
@@ -9,6 +9,8 @@ import threading
 
 import zmq
 from zmq import ZMQError
+
+from . import frames
 
 
 class Transceiver(object):
@@ -64,7 +66,7 @@ class Transceiver(object):
 
             else:
                 if (events > 0):
-                    msg = self.incoming.recv()
+                    msg = self.incoming.recv_multipart()
                     self.message_in(msg)
 
 
@@ -89,14 +91,14 @@ class Transceiver(object):
         """This sends a message to the messagehub for dispatch to all connected
         endpoints.
 
-        :param message: A dictionary.
+        :param message: A tuple of an evasion message.
 
         """
         outgoing = self.context.socket(zmq.PUSH);
         outgoing.connect(self.outgoing_uri);
-        outgoing.send(message)
+        outgoing.send_multipart(message)
         outgoing.close()
-        self.log.debug("message_out: sent to hub <%s>" % message)
+        self.log.debug("message_out: sent to hub <%s>" % " ".join(message))
 
 
     def message_in(self, message):
@@ -105,9 +107,14 @@ class Transceiver(object):
         The message_handler set in the constructer will be called if one
         was set.
 
+        :param message: A tuple of an evasion message.
+
         """
         if self.message_handler:
-            self.message_handler(message)
+            try:
+                self.message_handler(message)
+            except:
+                self.log.exception("message_in: Error handling received message - ")
         else:
             self.log.debug("message_in: message <%s>" % message)
 
@@ -119,7 +126,9 @@ class Register(object):
     def __init__(self, config={}, transceiver=None):
         """
         """
-        self.source_uuid = str(uuid.uuid4())
+        self.log = logging.getLogger("evasion.messenger.endpoint.Register")
+
+        self.endpoint_uuid = str(uuid.uuid4())
         if not transceiver:
             self.transceiver = Transceiver(config, self.message_handler)
         else:
@@ -129,12 +138,36 @@ class Register(object):
 
 
     def start(self):
-        """
-        """
+        """Call the transceiver's start()."""
+        self.transceiver.start()
+
 
     def stop(self):
+        """Call the transceiver's stop()."""
+        self.transceiver.stop()
+
+
+    def handle_dispath_message(self, endpoint_uuid, signal, data, reply_to):
+        """Handle a DISPATCH message.
+
+        :returns: None.
+
         """
+        self.log.debug("handle_dispath_message: %s" % str((endpoint_uuid, signal, data, reply_to)))
+
+
+    def handle_hub_present_message(self, payload):
+        """Handle a HUB_PRESENT message.
+
+        :param payload: This the content of a HUB_PRESENT message from the hub.
+
+        Currently it is a dict in the form: dict(version='X.Y.Z')
+
+        :returns: None.
+
         """
+        #self.log.debug("handle_hub_present_message: %s" % payload)
+
 
     def message_handler(self, message):
         """Called to handle a ZMQ Evasion message received.
@@ -153,6 +186,37 @@ class Register(object):
         This will result in the publish being call
 
         """
+        fields_present = len(message)
+
+        if fields_present > 0:
+            command = message[0]
+            if command and isinstance(command, basestring):
+                command = command.strip().lower()
+
+            command_args = []
+            if fields_present > 1:
+                command_args = message[1:]
+
+            if command == "dispatch":
+                try:
+                    endpoint_uuid, signal, data, reply_to = command_args
+                    data = json.loads(data)
+                    self.handle_dispath_message(endpoint_uuid, signal, data, reply_to)
+                except IndexError:
+                    self.log.error("message_handler: invalid amount of fields given to ")
+
+            elif command == "hub_present":
+                try:
+                    data = json.loads(command_args[0])
+                    self.handle_hub_present_message(data)
+                except IndexError:
+                    self.log.error("message_handler: no version data found in hub present message!")
+
+            else:
+                self.log.error("message_handler: unknown command <%s> no action taken." % command)
+
+        else:
+            self.log.error("message_handler: invalid message <%s>" % message)
 
 
     def subscribe(self, signal, callback):
@@ -192,17 +256,23 @@ class Register(object):
 
 
 
-    def publish(self, signal, data, source=None):
+    def publish(self, signal, data):
         """Called to publish a signal to all subscribers.
 
         :param signal: The signal used in a call to subscribe.
 
         :param data: This is a dictionary of data.
 
-        :param source: This is not None
-
         """
+        self.log.debug("publish: sending <%s> to hub with data <%s>"% (signal, data))
 
+        dispatch_message = frames.dispatch_message(
+            self.endpoint_uuid,
+            signal,
+            data,
+        )
+
+        self.transceiver.message_out(dispatch_message)
 
 
 
