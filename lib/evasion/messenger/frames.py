@@ -8,8 +8,10 @@ import pkg_resources
 
 PKG = pkg_resources.get_distribution('evasion-messenger')
 
+
 __all__ = [
     "hub_present_message", "dispatch_message", "dispatch_reply_message",
+    "sync_message",
 ]
 
 
@@ -24,6 +26,19 @@ def hub_present_message():
 
     """
     return ("HUB_PRESENT", json.dumps(dict(version=PKG.version)))
+
+
+def sync_message():
+    """Return the SYNC message is sent from endpoints to the hub on start.
+
+    :returns: A multi-part SYNC message.
+
+    For example::
+
+        ('SYNC', '{"version":"X.Y.Z"}')
+
+    """
+    return ("SYNC", json.dumps(dict(version=PKG.version)))
 
 
 def dispatch_message(endpoint_id, signal, data, reply_to=None):

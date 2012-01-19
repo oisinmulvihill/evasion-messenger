@@ -2,51 +2,57 @@
 """
 """
 import json
+import logging
 import unittest
-import threading
 
+
+from evasion.common import net
+from evasion.common import signal
 from evasion.messenger import hub
 from evasion.messenger import frames
 from evasion.messenger import endpoint
 
 
-TIMEOUT = 15
-
-class CallBack(object):
-    data = None
-
-    def __init__(self):
-        self.waiter = threading.Event()
-
-    def wait(self):
-        self.waiter.wait(TIMEOUT)
-        if not self.data:
-            raise ValueError("The callback never called before timeout.")
-        # reset for next run:
-        self.waiter.clear()
-
-    def __call__(self, data):
-        self.data = data
-        #print("CallBack: <%s>" % data)
-        self.waiter.set()
-
-    def __str__(self):
-        return "Test CallBack"
+TIMEOUT = 20
 
 
+class MessengerTC(unittest.TestCase):
 
-class Messenger(unittest.TestCase):
+    log = logging.getLogger("evasion.messenger.tests.testmessenger.MessengerTC")
 
     def setUp(self):
         self.reg = None
-        self.broker = hub.MessagingHub()
+
+        port1 = net.get_free_port()
+        port2 = net.get_free_port(exclude_ports=[port1])
+
+        self.config = dict(
+            endpoint=dict(
+                incoming='tcp://localhost:%d'%port1,
+                outgoing='tcp://localhost:%d'%port2,
+            ),
+            hub=dict(
+                outgoing='tcp://*:%d'%port1,
+                incoming='tcp://*:%d'%port2,
+                # Set to True to log messages received to DEBUG logging:
+                show_messages=True,
+                # Set to True to log HUB_PRESNET dispatches:
+                show_hub_presence=False,
+                # Disable HUB_PRESENT in testing
+                send_hub_present=False,
+            )
+        )
+        self.broker = hub.MessagingHub(self.config['hub'])
         self.broker.start()
         self.to_stop = []
 
+
     def tearDown(self):
+        self.log.debug("Cleanup")
         self.broker.stop()
         for i in self.to_stop:
             i.stop()
+        self.log.debug("Cleanup complete.")
 
 
     def test_string_message_generation(self):
@@ -57,18 +63,23 @@ class Messenger(unittest.TestCase):
         rc = frames.hub_present_message()
         self.assertEquals(rc, correct)
 
+        # SYNC message:
+        correct = ("SYNC", json.dumps(dict(version=frames.PKG.version)))
+        rc = frames.sync_message()
+        self.assertEquals(rc, correct)
+
         # Dispatch with/without reply uuid:
-        signal = 'tea_time'
+        sig = 'tea_time'
         endpoint_uid = '0987'
         reply_to_uid = '12345'
         data = dict(a=1)
 
-        rc = frames.dispatch_message(endpoint_uid, signal, data, reply_to_uid)
-        correct = ("DISPATCH", endpoint_uid, signal, json.dumps(dict(a=1)), reply_to_uid)
+        rc = frames.dispatch_message(endpoint_uid, sig, data, reply_to_uid)
+        correct = ("DISPATCH", endpoint_uid, sig, json.dumps(dict(a=1)), reply_to_uid)
         self.assertEquals(rc, correct)
 
-        rc = frames.dispatch_message(endpoint_uid, signal, data)
-        correct = ("DISPATCH", endpoint_uid, signal, json.dumps(dict(a=1)), '0')
+        rc = frames.dispatch_message(endpoint_uid, sig, data)
+        correct = ("DISPATCH", endpoint_uid, sig, json.dumps(dict(a=1)), '0')
         self.assertEquals(rc, correct)
 
         # Dispatch reply:
@@ -78,30 +89,115 @@ class Messenger(unittest.TestCase):
         self.assertEquals(rc, correct)
 
 
+    def testTransceiverComms(self):
+        """Test the functionality of the Transceiver class on which the Register builds.
+        """
+        # The Hub is running at this point. Now I need to set up the low
+        # level Transciever and the message handler. This will get passed
+        # all traffic received from the Hub. This includes any messages
+        # we sent, back to us for local distribution.
+        #
+        message_handler = signal.CallBack(TIMEOUT)
+
+        tran = endpoint.Transceiver(self.config['endpoint'], message_handler)
+        self.to_stop.append(tran) # clean up if test fails
+
+        # Start receiving messages from the Hub:
+        tran.start()
+
+        # Now generate a hub present and publish it.
+        hub_present = frames.hub_present_message()
+        tran.message_out(hub_present)
+
+        # We should now have received this back again:
+        message_handler.wait()
+        correct = ("HUB_PRESENT", json.dumps(dict(version=frames.PKG.version)))
+        self.assertEquals(message_handler.data, correct)
+
+        # Make sure I can only send tuple/list messages:
+        invalid = ["abc",1,None,{}]
+        for invalid_message in invalid:
+            self.assertRaises(endpoint.MessageOutError, tran.message_out, invalid_message)
+
+        # Tuple/List only
+        tran.message_out(("Message",))
+        message_handler.wait()
+        self.assertEquals(message_handler.data, ("Message",))
+
+        tran.message_out(["Message",])
+        message_handler.wait()
+        self.assertEquals(message_handler.data, ("Message",))
+
+
+    def testRegisterSignalValidator(self):
+        """Test the Register.validate_signal class method.
+        """
+        # Valid cases:
+        self.assertEquals(endpoint.Register.validate_signal('A'), 'A')
+        self.assertEquals(endpoint.Register.validate_signal(' tea_time '), 'TEA_TIME')
+        self.assertEquals(endpoint.Register.validate_signal(' tea_time'), 'TEA_TIME')
+        self.assertEquals(endpoint.Register.validate_signal('tea_time '), 'TEA_TIME')
+
+        # Invalid cases:
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, " ")
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, "")
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, None)
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, {})
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, [])
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, (0,))
+
+
+    def test_propogate_message(self):
+        """Test the Hub test_propogate_message and its rejection of ceartain type of messages.
+        """
+        # Messages that will be sent to all endpoints i.e dispatch messages and repies:
+        result = hub.MessagingHub.propogate_message(frames.dispatch_message('endpoint_uid', 'sig', {}))
+        self.assertEquals(result, True)
+
+        result = hub.MessagingHub.propogate_message(frames.dispatch_reply_message('reply_to_uid', {}))
+        self.assertEquals(result, True)
+
+        # Messages that won't be propagated:
+        result = hub.MessagingHub.propogate_message(frames.sync_message())
+        self.assertEquals(result, False)
+
+        result = hub.MessagingHub.propogate_message(frames.hub_present_message())
+        self.assertEquals(result, False)
+
+        # Bad mesasge data received:
+        result = hub.MessagingHub.propogate_message("")
+        self.assertEquals(result, False)
+
+        result = hub.MessagingHub.propogate_message([])
+        self.assertEquals(result, False)
+
+
     def testPublistSubscribe(self):
         """Test the publish-subscribe.
         """
-        my_cb = CallBack()
-        tran = endpoint.Transceiver({}, my_cb)
-        self.to_stop.append(tran)
-        tran.start()
+        class TeaTimeHandler(signal.CallBack):
+            def __init__(self):
+                super(TeaTimeHandler, self).__init__(TIMEOUT)
+            def __call__(self, endpoint_uuid, data, reply_to):
+                super(TeaTimeHandler, self).__call__((endpoint_uuid, data, reply_to))
 
-        # Wait for hub present
-        import pdb ; pdb.set_trace()
+        tea_time_handler = TeaTimeHandler()
 
-        my_cb.wait()
+        # Create a register instance for this process and start
+        # it. The hub will be running at this point so we should
+        # be able to receive messages.
+        #
+        reg = endpoint.Register(self.config['endpoint'])
+        self.to_stop.append(reg) # clean up if test fails
+        reg.start()
 
-        return
+        # Now subscribe to the tea time message:
+        #
+        reg.subscribe('tea_time', tea_time_handler)
+        reg.publish('tea_time', dict(cake="sponge"))
 
-        self.reg = endpoint.Register()
-        self.reg.start()
-
-        self.reg.subscribe('tea_time', my_cb)
-        self.reg.publish('tea_time', dict(cake="sponge"))
-
-        import pdb ; pdb.set_trace()
-
-        my_cb.wait()
-        self.assertEquals()
-
-
+        # The callback should contain the data now if
+        # the messaging system is working correctly.
+        #
+        tea_time_handler.wait()
+        self.assertEquals(tea_time_handler.data, (reg.endpoint_uuid, dict(cake="sponge"), None))

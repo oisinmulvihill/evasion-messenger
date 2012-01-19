@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# encoding: utf-8
+# -*- coding: utf-8 -*-
 """
 testeventutils.py
 
@@ -11,8 +10,6 @@ import thread
 import unittest
 import threading
 
-from pydispatch import dispatcher
-
 from evasion import messenger
 
 
@@ -22,7 +19,7 @@ class SignalHelper(object):
     def __init__(self, signal_event):
         self.data = ""
         self.signal = None
-        
+
         dispatcher.connect(
             self.tc,
             signal=signal_event,
@@ -32,10 +29,10 @@ class SignalHelper(object):
         #print "GOT: ", signal
         self.data = data['data']
         self.signal = signal
-            
 
 
-        
+
+
 
 class TestEventUtils(unittest.TestCase):
     """Test the event utils helper functions
@@ -48,9 +45,9 @@ class TestEventUtils(unittest.TestCase):
         test_data = "1234"
 
         sh = SignalHelper(testing_event)
-        
+
         messenger.eventutils.send(testing_event, test_data)
-        
+
         self.assertEquals(sh.data, test_data, "send dispatch failed!")
 
 
@@ -62,14 +59,14 @@ class TestEventUtils(unittest.TestCase):
         event = messenger.EVT("SOME_EVENT")
         self.assertNotEquals(event.uid, '')
         data = dict(data="1234")
-        
+
         def waitAndSignal(data=0):
             # Send the reply after waiting a fixed time for the reciever
             # to be ready. Not a great way of doing this, on a slow machine
             # this might give false positives.
             time.sleep(2)
             messenger.eventutils.reply(event, data)
-            
+
         thread.start_new_thread(waitAndSignal, (data,))
 
         # Wait for the event to occur:
@@ -110,7 +107,7 @@ class TestEventUtils(unittest.TestCase):
 
         # Set up who the reply is for:
         reply_evt = messenger.REVT(event.uid)
-        
+
 
         # Check the timeout works when I never receive any reply:
         data = dict(abc=123)
@@ -136,7 +133,7 @@ class TestEventUtils(unittest.TestCase):
 
         # Try send_await without using a messenger event and make sure its caught.
         self.assertRaises(ValueError, messenger.eventutils.send_await, "Not a Messenger Event", data, time_out)
-        
+
 
 
     def testWaitForEvent(self):
@@ -158,8 +155,8 @@ class TestEventUtils(unittest.TestCase):
         # Wait for the event to occur:
         messenger.eventutils.wait_for_event(event, timeout=10)
 
-    
 
-    
+
+
 if __name__ == '__main__':
     unittest.main()

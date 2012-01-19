@@ -30,7 +30,7 @@ class MessagingHub(object):
         :param config: This is a dict in the form::
 
             config = dict(
-                dispatch='tcp://*:15566', # default
+                outgoing='tcp://*:15566', # default
                 incoming='tcp://*:15567', # default
                 idle_timeout=2000, # milliseconds:
                 # Set to True to log messages received to DEBUG logging:
@@ -44,97 +44,55 @@ class MessagingHub(object):
         """
         self.log = logging.getLogger("evasion.messenger.MessagingHub")
 
-        self.exitTime = False
+        self.exit_time = threading.Event()
         self.wait_for_exit = threading.Event()
-        self.context = zmq.Context()
 
         # This sends messages to all connected client of zeromq:
-        self.dispatch = self.context.socket(zmq.PUB)
-        dispath_uri = config.get("dispatch", 'tcp://*:15566')
-        self.log.info("Dispatching on: %s" % dispath_uri)
-        self.dispatch.bind(dispath_uri)
+        self.outgoing_uri = config.get("outgoing", 'tcp://*:15566')
+        self.log.info("Dispatching on: %s" % self.outgoing_uri)
 
         # This receives a messages from any of the connected clients:
-        self.incoming = self.context.socket(zmq.PULL)
-        incoming_uri = config.get("incoming", 'tcp://*:15567')
-        self.log.info("Incomming on: %s" % incoming_uri)
-        self.incoming.bind(incoming_uri)
+        self.incoming_uri = config.get("incoming", 'tcp://*:15567')
+        self.log.info("Incoming on: %s" % self.incoming_uri)
 
-        idle_timeout = int(config.get("idle_timeout", 2000))
-        self.log.info("Idle Timeout (ms): %d" % idle_timeout)
-        self.idleTimeout =idle_timeout
+        self.idle_timeout = int(config.get("idle_timeout", 2000))
+        self.log.info("Idle Timeout (ms): %d" % self.idle_timeout)
 
         self.show_messages = bool(config.get("show_messages", False))
         self.show_hub_presence = bool(config.get("show_hub_presence", False))
         self.send_hub_present = bool(config.get("send_hub_present", True))
 
-        # I use the poller to see if there is an incoming messages,
-        # if not I can check if its exit time or do other work.
-        self.poller = zmq.Poller()
-        self.poller.register(self.incoming, zmq.POLLIN)
+
+    @classmethod
+    def propogate_message(cls, message):
+        """Called to determine if a message should be propagate to other endpoints.
+
+        This will return False for SYNC messages.
+
+        This will return False for empty messages.
+
+        """
+        if not message:
+            # Do not propagate empty messages.
+            return False
+
+        command = message[0].strip().upper()
+        if command in ('HUB_PRESENT','SYNC'):
+            return False
+
+        return True
 
 
-    def stop(self, wait=10):
+    def stop(self, wait=2):
         """Tell main to exit when it next checks the exit flag.
 
         :param wait: The time in seconds to wait before giving up
         on a clean shutdown.
 
         """
-        self.exitTime = True
+        self.exit_time.set()
         self.wait_for_exit.wait(wait)
 
-
-    def main(self):
-        """Run the message distribution until shutdown is called.
-        """
-        # Don't check each message whether to log. Do it once with
-        # setting a default noop function call if no logging is enabled.
-        #
-        log_message = lambda msg: None
-        if self.show_messages:
-            def log_message(msg):
-                self.log.debug("Message to all endpoints: <%s>" % message)
-
-        log_hub_present = lambda: None
-        if self.show_hub_presence:
-            def log_hub_present():
-                self.log.debug("broadcasting HUB_PRESENT to all endpoints.")
-
-        HUB_PRESENT = frames.hub_present_message()
-
-        def _shutdown():
-            self.log.info("main: Waiting for shutdown...")
-            self.incoming.close()
-            self.dispatch.close()
-            self.wait_for_exit.set()
-            self.log.info("main: Shutdown complete.")
-
-        self.log.info("main: Mainloop running.")
-        try:
-            while not self.exitTime:
-                try:
-                    events = self.poller.poll(self.idleTimeout)
-                except ZMQError as e:
-                    # 4 = 'Interrupted system call'
-                    if e.errno == 4:
-                        self.log.info("main: sigint or other signal interrupt, exit time <%s>" % e)
-                    else:
-                        self.log.info("main: <%s>" % e)
-                        _shutdown()
-                        raise e
-                else:
-                    if (events):
-                        message = self.incoming.recv_multipart()
-                        log_message(message)
-                        self.dispatch.send_multipart(message)
-
-                    else:
-                        if self.send_hub_present:
-                            log_hub_present()
-                            self.dispatch.send_multipart(HUB_PRESENT)
-        finally:
-            _shutdown()
 
     def start(self):
         """Run the messaging main inside a thread.
@@ -145,6 +103,74 @@ class MessagingHub(object):
         def _wrap(data=0):
             self.main()
         thread.start_new(_wrap, (0,))
+
+
+    def main(self):
+        """Run the message distribution until shutdown is called.
+        """
+        self.exit_time.clear()
+
+        context = zmq.Context()
+        dispatch = context.socket(zmq.PUB)
+        dispatch.bind(self.outgoing_uri)
+        incoming = context.socket(zmq.PULL)
+        incoming.bind(self.incoming_uri)
+
+        def _shutdown():
+            self.log.info("main: Waiting for shutdown...")
+            dispatch.close()
+            incoming.close()
+            context.term()
+            self.wait_for_exit.set()
+            self.log.info("main: Shutdown complete.")
+
+        # I use the poller to see if there is an incoming messages,
+        # if not I can check if its exit time or do other work.
+        poller = zmq.Poller()
+        poller.register(incoming, zmq.POLLIN)
+
+        # Don't check each message whether to log. Do it once with
+        # setting a default noop function call if no logging is enabled.
+        #
+        log_message = lambda msg: None
+        if self.show_messages:
+            log_message = self.log.debug
+
+        HUB_PRESENT = frames.hub_present_message()
+        log_hub_present = lambda: None
+        if self.show_hub_presence:
+            def log_hub_present():
+                self.log.debug("broadcasting HUB_PRESENT to all endpoints.")
+
+        self.log.info("main: Mainloop running.")
+        try:
+            while not self.exit_time.is_set():
+                try:
+                    events = poller.poll(self.idle_timeout)
+                except ZMQError as e:
+                    # 4 = 'Interrupted system call'
+                    if e.errno == 4:
+                        self.log.info("main: sigint or other signal interrupt, exit time <%s>" % e)
+                        break
+                    else:
+                        self.log.info("main: <%s>" % e)
+                        break
+                else:
+                    if (events):
+                        message = incoming.recv_multipart()
+                        log_message("main: received<%s>" % message)
+                        if self.propogate_message(message):
+                            # Sync before begining then send the message:
+                            dispatch.send_multipart(frames.sync_message())
+                            dispatch.send_multipart(message)
+                            log_message("main: propagated<%s>" % message)
+                    else:
+                        if self.send_hub_present:
+                            log_hub_present()
+                            dispatch.send_multipart(HUB_PRESENT)
+        finally:
+            _shutdown()
+
 
 
 

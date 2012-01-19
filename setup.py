@@ -23,6 +23,7 @@ Description=Summary
 
 needed = [
     'pyzmq',
+    'evasion-common',
 ]
 
 # needed for < python 2.6
