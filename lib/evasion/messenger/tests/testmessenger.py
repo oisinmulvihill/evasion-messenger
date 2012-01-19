@@ -175,6 +175,13 @@ class MessengerTC(unittest.TestCase):
     def testPublistSubscribe(self):
         """Test the publish-subscribe.
         """
+        class FakeTransceiver(object):
+            def start(self):
+                pass
+            def stop(self):
+                pass
+
+
         class TeaTimeHandler(signal.CallBack):
             def __init__(self):
                 super(TeaTimeHandler, self).__init__(TIMEOUT)
