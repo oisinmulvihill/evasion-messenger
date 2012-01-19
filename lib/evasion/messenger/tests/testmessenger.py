@@ -172,7 +172,7 @@ class MessengerTC(unittest.TestCase):
         self.assertEquals(result, False)
 
 
-    def testPublistSubscribe(self):
+    def testPublistSubscribeRegisterAbiltiesUsingFakeTransciever(self):
         """Test the publish-subscribe.
         """
         class FakeTransceiver(object):
