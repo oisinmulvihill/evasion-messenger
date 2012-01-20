@@ -249,6 +249,33 @@ class Register(object):
         #self.log.debug("handle_hub_present_message: %s" % payload)
 
 
+    def handle_sync_message(self, payload):
+        """Handle a SYNC message received from the HUB.
+
+        :param payload: version of the hub message.
+
+        Currently it is a dict in the form: dict(version='X.Y.Z')
+
+        :returns: None.
+
+        """
+        #self.log.debug("handle_hub_present_message: %s" % payload)
+
+
+    def unhandled_message(self, reason, message):
+        """Called when and unknown or malformed message is handled.
+
+        :param reason: 'unknown' or 'error'
+
+        :param message: The received junk.
+
+        """
+        if reason == 'unknown':
+            self.log.warn("message_handler: unknown message command <%s> no action taken." % message[0])
+        else:
+            self.log.error("message_handler: invalid message <%s>" % message)
+
+
     def message_handler(self, message):
         """Called to handle a ZMQ Evasion message received.
 
@@ -293,14 +320,17 @@ class Register(object):
                     self.log.error("message_handler: no version data found in hub present message!")
 
             elif command == "sync":
-                # Ignore
-                pass
+                try:
+                    data = json.loads(command_args[0])
+                    self.handle_sync_message(data)
+                except IndexError:
+                    self.log.error("message_handler: no version data found in sync message!")
 
             else:
-                self.log.error("message_handler: unknown command <%s> no action taken." % command)
+                self.unhandled_message('unknown', message)
 
         else:
-            self.log.error("message_handler: invalid message <%s>" % message)
+            self.unhandled_message('error', message)
 
 
     def subscribe(self, signal, callback):

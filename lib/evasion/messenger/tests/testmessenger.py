@@ -11,9 +11,17 @@ from evasion.common import signal
 from evasion.messenger import hub
 from evasion.messenger import frames
 from evasion.messenger import endpoint
-
+from evasion.common.testing import withhub
 
 TIMEOUT = 20
+
+
+TESTHUB = withhub.TestModuleHelper()
+
+# Nose will run these creating a test hub which we can use:
+#
+setup_module = TESTHUB.setup_module
+teardown_module = TESTHUB.teardown_module
 
 
 class MessengerTC(unittest.TestCase):
@@ -21,37 +29,14 @@ class MessengerTC(unittest.TestCase):
     log = logging.getLogger("evasion.messenger.tests.testmessenger.MessengerTC")
 
     def setUp(self):
-        self.reg = None
-
-        port1 = net.get_free_port()
-        port2 = net.get_free_port(exclude_ports=[port1])
-
-        self.config = dict(
-            endpoint=dict(
-                incoming='tcp://localhost:%d'%port1,
-                outgoing='tcp://localhost:%d'%port2,
-            ),
-            hub=dict(
-                outgoing='tcp://*:%d'%port1,
-                incoming='tcp://*:%d'%port2,
-                # Set to True to log messages received to DEBUG logging:
-                show_messages=True,
-                # Set to True to log HUB_PRESNET dispatches:
-                show_hub_presence=False,
-                # Disable HUB_PRESENT in testing
-                send_hub_present=False,
-            )
-        )
-        self.broker = hub.MessagingHub(self.config['hub'])
-        self.broker.start()
         self.to_stop = []
 
 
     def tearDown(self):
         self.log.debug("Cleanup")
-        self.broker.stop()
         for i in self.to_stop:
-            i.stop()
+            if i:
+                i.stop
         self.log.debug("Cleanup complete.")
 
 
@@ -99,7 +84,7 @@ class MessengerTC(unittest.TestCase):
         #
         message_handler = signal.CallBack(TIMEOUT)
 
-        tran = endpoint.Transceiver(self.config['endpoint'], message_handler)
+        tran = endpoint.Transceiver(TESTHUB.config['endpoint'], message_handler)
         self.to_stop.append(tran) # clean up if test fails
 
         # Start receiving messages from the Hub:
@@ -173,38 +158,95 @@ class MessengerTC(unittest.TestCase):
 
 
     def testPublistSubscribeRegisterAbiltiesUsingFakeTransciever(self):
-        """Test the publish-subscribe.
+        """Test the publish-subscribe using a FakeTransceiver so there is no actual network traffic.
         """
         class FakeTransceiver(object):
+            def __init__(self, config={}, message_handler=None):
+                self.config = config
+                self.handler = message_handler
+                self.started = False
+                self.stopped = False
+                self.msg_out = ''
             def start(self):
-                pass
+                self.started = True
             def stop(self):
-                pass
+                self.stopped = True
+            def message_out(self, message):
+                self.msg_out = message
 
 
         class TeaTimeHandler(signal.CallBack):
-            def __init__(self):
-                super(TeaTimeHandler, self).__init__(TIMEOUT)
             def __call__(self, endpoint_uuid, data, reply_to):
                 super(TeaTimeHandler, self).__call__((endpoint_uuid, data, reply_to))
 
         tea_time_handler = TeaTimeHandler()
 
-        # Create a register instance for this process and start
-        # it. The hub will be running at this point so we should
-        # be able to receive messages.
-        #
-        reg = endpoint.Register(self.config['endpoint'])
-        self.to_stop.append(reg) # clean up if test fails
+
+        class RegisterUnderTest(endpoint.Register):
+            """Add some method to test the hub_present handler and others"""
+            hubpresent_called = False
+            sync_called = False
+            def handle_hub_present_message(self, payload):
+                self.hubpresent_called = True
+            def handle_sync_message(self, payload):
+                self.sync_called = True
+
+        # Use the fake transceiver an emulate hub-endpoint comms.
+        ft = FakeTransceiver(TESTHUB.config['endpoint'])
+        reg = RegisterUnderTest(transceiver=ft)
+
+        # check the transceiver initial state:
+        self.assertEquals(ft.stopped, False)
+        self.assertEquals(ft.started, False)
+        self.assertEquals(ft.msg_out, '')
+
         reg.start()
 
+        self.assertEquals(ft.started, True)
+        self.assertEquals(ft.stopped, False)
+
         # Now subscribe to the tea time message:
-        #
         reg.subscribe('tea_time', tea_time_handler)
+
+        # No messages out yet:
+        self.assertEquals(ft.msg_out, '')
+
+        # This will result in a message out to the "hub", this will give it back
+        # for local dispatch. In a real one it would travel to all other end points
+        # as well:
         reg.publish('tea_time', dict(cake="sponge"))
 
-        # The callback should contain the data now if
-        # the messaging system is working correctly.
-        #
-        tea_time_handler.wait()
+        # No message in, however the DISPATCH message should be in the message_out
+        dispatch_msg = frames.dispatch_message(reg.endpoint_uuid, 'tea_time', dict(cake="sponge"))
+        self.assertEquals(ft.msg_out, dispatch_msg)
+
+        # Now simulate the message in by calling the Register handle_message
+        reg.message_handler(dispatch_msg)
+
+        # Out tea_time signal callback should contain the data and None for the
+        # reply_to field, as no reply was present:
         self.assertEquals(tea_time_handler.data, (reg.endpoint_uuid, dict(cake="sponge"), None))
+        tea_time_handler.data = None
+
+        # Now simulate a dispatch for a signal not subscribed to:
+        msg = frames.dispatch_message(reg.endpoint_uuid, 'ducks', dict(like="bread"))
+        reg.message_handler(msg)
+        self.assertEquals(tea_time_handler.data, None)
+
+        # Test that SYNC and HUB_PRESENT are handled correctly
+        self.assertEquals(reg.sync_called, False)
+        self.assertEquals(reg.hubpresent_called, False)
+
+        reg.message_handler(frames.sync_message())
+        self.assertEquals(reg.sync_called, True)
+
+        reg.message_handler(frames.hub_present_message())
+        self.assertEquals(reg.hubpresent_called, True)
+
+        # Done:
+        reg.stop()
+        self.assertEquals(ft.stopped, True)
+
+
+
+
