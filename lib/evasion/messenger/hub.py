@@ -111,10 +111,21 @@ class MessagingHub(object):
         self.exit_time.clear()
 
         context = zmq.Context()
+
         dispatch = context.socket(zmq.PUB)
-        dispatch.bind(self.outgoing_uri)
+        try:
+            dispatch.bind(self.outgoing_uri)
+        except ZMQError:
+            self.exit_time.set()
+            return
+
         incoming = context.socket(zmq.PULL)
-        incoming.bind(self.incoming_uri)
+        try:
+            incoming.bind(self.incoming_uri)
+        except ZMQError:
+            dispatch.close()
+            self.exit_time.set()
+            return
 
         def _shutdown():
             self.log.info("main: Waiting for shutdown...")

@@ -13,7 +13,7 @@ from evasion.messenger import frames
 from evasion.messenger import endpoint
 from evasion.common.testing import withhub
 
-TIMEOUT = 20
+TIMEOUT = 5
 
 
 TESTHUB = withhub.TestModuleHelper()
@@ -87,16 +87,20 @@ class MessengerTC(unittest.TestCase):
         tran = endpoint.Transceiver(TESTHUB.config['endpoint'], message_handler)
         self.to_stop.append(tran) # clean up if test fails
 
-        # Start receiving messages from the Hub:
+        # Start receiving messages from the Hub and send the sync_message ready
+        # to being receiving:
         tran.start()
+        tran.message_out(frames.sync_message())
 
         # Now generate a hub present and publish it.
         hub_present = frames.hub_present_message()
         tran.message_out(hub_present)
 
+
         # We should now have received this back again:
         message_handler.wait()
         correct = ("HUB_PRESENT", json.dumps(dict(version=frames.PKG.version)))
+
         self.assertEquals(message_handler.data, correct)
 
         # Make sure I can only send tuple/list messages:
