@@ -46,6 +46,7 @@ class Transceiver(object):
         self.log.info("Idle Timeout (ms): %d" % self.idle_timeout)
 
         self.message_handler = message_handler
+        self.sync_message = frames.sync_message()
 
 
     def main(self):
@@ -110,21 +111,21 @@ class Transceiver(object):
         :returns: None.
 
         """
-        #self.log.debug("message_out: to send <%s>" % str(message))
         if isinstance(message, list) or isinstance(message, tuple):
             context = zmq.Context()
             outgoing = context.socket(zmq.PUSH);
             try:
                 # send a sync to kick off the hub:
                 outgoing.connect(self.outgoing_uri);
-                outgoing.send_multipart(frames.sync_message())
+                outgoing.send_multipart(self.sync_message)
+                #self.log.debug("message_out: message <%s>" % str(self.sync_message))
                 outgoing.send_multipart(message)
+                #self.log.debug("message_out: message <%s>" % str(message))
             finally:
                 outgoing.close()
                 context.term()
         else:
             raise MessageOutError("The message must be a list or tuple instead of <%s>" % type(message))
-
 
 
     def message_in(self, message):
@@ -178,7 +179,6 @@ class Register(object):
             self.transceiver = Transceiver(config, self.message_handler)
         else:
             self.transceiver = transceiver
-
 
 
     @classmethod
@@ -283,53 +283,52 @@ class Register(object):
 
         For example::
 
-            'DISPATCH some_string {json object}'
+            'DISPATCH endpoint_uuid some_signal {json object} reply_to'
 
-            json_object = json.dumps(dict(
-                event='some_string',
-                data={...}
-            ))
-
-        This will result in the publish being call
+        The message_handler will attempt to decode the first word and
+        use it to call the corresponding method. In the above example
+        handle_hub_present_message() would be called.
 
         """
-        fields_present = len(message)
+        try:
+            fields_present = len(message)
 
-        if fields_present > 0:
-            command = message[0]
-            if command and isinstance(command, basestring):
-                command = command.strip().lower()
+            if fields_present > 0:
+                command = message[0]
+                if command and isinstance(command, basestring):
+                    command = command.strip().lower()
 
-            command_args = []
-            if fields_present > 1:
-                command_args = message[1:]
+                command_args = []
+                if fields_present > 1:
+                    command_args = message[1:]
 
-            if command == "dispatch":
-                try:
-                    endpoint_uuid, signal, data, reply_to = command_args
-                    data = json.loads(data)
-                    self.handle_dispath_message(endpoint_uuid, signal, data, reply_to)
-                except IndexError:
-                    self.log.error("message_handler: invalid amount of fields given to ")
+                if command == "dispatch":
+                    try:
+                        endpoint_uuid, signal, data, reply_to = command_args
+                        data = json.loads(data)
+                        self.handle_dispath_message(endpoint_uuid, signal, data, reply_to)
+                    except IndexError:
+                        self.log.error("message_handler: invalid amount of fields given to ")
 
-            elif command == "hub_present":
-                try:
-                    data = json.loads(command_args[0])
-                    self.handle_hub_present_message(data)
-                except IndexError:
-                    self.log.error("message_handler: no version data found in hub present message!")
+                elif command == "hub_present":
+                    try:
+                        data = json.loads(command_args[0])
+                        self.handle_hub_present_message(data)
+                    except IndexError:
+                        self.log.error("message_handler: no version data found in hub present message!")
 
-            elif command == "sync":
-                try:
-                    data = json.loads(command_args[0])
-                    self.handle_sync_message(data)
-                except IndexError:
-                    self.log.error("message_handler: no version data found in sync message!")
+                elif command == "sync":
+                    try:
+                        data = json.loads(command_args[0])
+                        self.handle_sync_message(data)
+                    except IndexError:
+                        self.log.error("message_handler: no version data found in sync message!")
 
-            else:
-                self.unhandled_message('unknown', message)
+                else:
+                    self.unhandled_message('unknown', message)
 
-        else:
+        except Exception:
+            self.log.exception("message_handler: error processing message <%s> " % str(message))
             self.unhandled_message('error', message)
 
 

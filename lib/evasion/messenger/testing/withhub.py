@@ -6,6 +6,10 @@ to be installed.
 """
 import logging
 
+from evasion.common import net
+from evasion.messenger import hub
+
+
 
 class TestModuleHelper(object):
     """This provides a why to setup and tear down a hub for testing with nose.
@@ -54,9 +58,6 @@ class TestModuleHelper(object):
         """
         self.log.info("setup_module: for <%s>" % module)
 
-        from evasion.common import net
-        from evasion.messenger import hub
-
         port1 = net.get_free_port()
         port2 = net.get_free_port(exclude_ports=[port1])
 
@@ -79,6 +80,7 @@ class TestModuleHelper(object):
         self.log.debug("setup_module: generated configuration %s" % self.config)
 
         self.broker = hub.MessagingHub(self.config['hub'])
+        self.log.info("setup_module: starting the hub.")
         self.broker.start()
 
         self.log.info("setup_module: the hub has been started.")

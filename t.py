@@ -3,14 +3,14 @@ import logging
 
 from evasion.messenger import endpoint
 
-# log = logging.getLogger()
-# hdlr = logging.StreamHandler()
-# fmt = '%(asctime)s %(name)s %(levelname)s %(message)s'
-# formatter = logging.Formatter(fmt)
-# hdlr.setFormatter(formatter)
-# log.addHandler(hdlr)
-# log.setLevel(logging.DEBUG)
-# log.propagate = False
+log = logging.getLogger()
+hdlr = logging.StreamHandler()
+fmt = '%(asctime)s %(name)s %(levelname)s %(message)s'
+formatter = logging.Formatter(fmt)
+hdlr.setFormatter(formatter)
+log.addHandler(hdlr)
+log.setLevel(logging.DEBUG)
+log.propagate = False
 
 
 
@@ -33,7 +33,8 @@ payload = "A" * 1024 * 10 * 10
 try:
     while True:
         reg.publish('tea_time', dict(tea_time_count=c.next()))
-        time.sleep(0.01)
+        time.sleep(10)
+        #time.sleep(0.01)
 
 except KeyboardInterrupt:
     reg.stop()

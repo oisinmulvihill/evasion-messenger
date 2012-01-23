@@ -65,7 +65,7 @@ class MessagingHub(object):
 
     @classmethod
     def propogate_message(cls, message):
-        """Called to determine if a message should be propagate to other endpoints.
+        """Called to determine if a message should propagate to other endpoints.
 
         This will return False for SYNC messages.
 
@@ -156,6 +156,7 @@ class MessagingHub(object):
         self.log.info("main: Mainloop running.")
         try:
             while not self.exit_time.is_set():
+                #self.log.info("main: tick.")
                 try:
                     events = poller.poll(self.idle_timeout)
                 except ZMQError as e:
@@ -237,6 +238,12 @@ def main():
         help="The ZMQ Subscribe set up, defeault: %s" % DEFAULT_SUBSCRIBE_ON,
     )
 
+    parser.add_option(
+        "--disable-hub-presence", action="store_true", dest="disable_hub_presence",
+        default=False,
+        help="Turn off the dispatch of HUB_PRESENCE when idle.",
+    )
+
     (options, args) = parser.parse_args()
 
     config = dict(
@@ -245,6 +252,7 @@ def main():
         idle_timeout=int(options.wait_for_message_timeout),
         show_messages=options.show_messages,
         show_hub_presence=options.show_hub_presence,
+        send_hub_present=(not options.disable_hub_presence),
     )
 
     # Run the hub after setting up handlers for common signals.

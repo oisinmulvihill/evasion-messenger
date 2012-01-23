@@ -6,14 +6,14 @@ import logging
 import unittest
 
 
-from evasion.common import net
 from evasion.common import signal
 from evasion.messenger import hub
 from evasion.messenger import frames
 from evasion.messenger import endpoint
-from ..testing import withhub
 
-TIMEOUT = 5
+from evasion.messenger.testing import withhub
+
+TIMEOUT = 10
 
 
 TESTHUB = withhub.TestModuleHelper()
@@ -92,16 +92,13 @@ class MessengerTC(unittest.TestCase):
         tran.start()
         tran.message_out(frames.sync_message())
 
-        # Now generate a hub present and publish it.
-        hub_present = frames.hub_present_message()
-        tran.message_out(hub_present)
-
+        # Send a message.
+        test_message = ("hello", "there")
+        tran.message_out(test_message)
 
         # We should now have received this back again:
         message_handler.wait()
-        correct = ("HUB_PRESENT", json.dumps(dict(version=frames.PKG.version)))
-
-        self.assertEquals(message_handler.data, correct)
+        self.assertEquals(message_handler.data, test_message)
 
         # Make sure I can only send tuple/list messages:
         invalid = ["abc",1,None,{}]
@@ -190,11 +187,13 @@ class MessengerTC(unittest.TestCase):
             """Add some method to test the hub_present handler and others"""
             hubpresent_called = False
             sync_called = False
+            err = None
             def handle_hub_present_message(self, payload):
                 self.hubpresent_called = True
             def handle_sync_message(self, payload):
                 self.sync_called = True
-
+            def unhandled_message(self, reason, message):
+                self.err = (reason, message)
         # Use the fake transceiver an emulate hub-endpoint comms.
         ft = FakeTransceiver(TESTHUB.config['endpoint'])
         reg = RegisterUnderTest(transceiver=ft)
@@ -246,6 +245,24 @@ class MessengerTC(unittest.TestCase):
 
         reg.message_handler(frames.hub_present_message())
         self.assertEquals(reg.hubpresent_called, True)
+
+        # Test the unhandled message:
+        msg = ["hello", "1234"]
+        reg.message_handler(msg)
+        self.assertEquals(tea_time_handler.data, None)
+        self.assertEquals(reg.err, ('unknown', msg))
+
+        # Malformed message should not blow up the message handler
+        msg = ["DISPATCH", ""]
+        reg.message_handler(msg)
+        self.assertEquals(tea_time_handler.data, None)
+        self.assertEquals(reg.err, ('error', msg))
+        
+        # Bad dispatch JSON
+        msg = ["DISPATCH", "endpoint_uuid", "bob-sig", "{bad:json}", "0"]
+        reg.message_handler(msg)
+        self.assertEquals(tea_time_handler.data, None)
+        self.assertEquals(reg.err, ('error', msg))
 
         # Done:
         reg.stop()
