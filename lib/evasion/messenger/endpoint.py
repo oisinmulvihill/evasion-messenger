@@ -303,26 +303,17 @@ class Register(object):
                     command_args = message[1:]
 
                 if command == "dispatch":
-                    try:
-                        endpoint_uuid, signal, data, reply_to = command_args
-                        data = json.loads(data)
-                        self.handle_dispath_message(endpoint_uuid, signal, data, reply_to)
-                    except IndexError:
-                        self.log.error("message_handler: invalid amount of fields given to ")
+                    endpoint_uuid, signal, data, reply_to = command_args
+                    data = json.loads(data)
+                    self.handle_dispath_message(endpoint_uuid, signal, data, reply_to)
 
                 elif command == "hub_present":
-                    try:
-                        data = json.loads(command_args[0])
-                        self.handle_hub_present_message(data)
-                    except IndexError:
-                        self.log.error("message_handler: no version data found in hub present message!")
+                    data = json.loads(command_args[0])
+                    self.handle_hub_present_message(data)
 
                 elif command == "sync":
-                    try:
-                        data = json.loads(command_args[0])
-                        self.handle_sync_message(data)
-                    except IndexError:
-                        self.log.error("message_handler: no version data found in sync message!")
+                    data = json.loads(command_args[0])
+                    self.handle_sync_message(data)
 
                 else:
                     self.unhandled_message('unknown', message)
