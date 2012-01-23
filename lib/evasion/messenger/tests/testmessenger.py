@@ -11,7 +11,7 @@ from evasion.common import signal
 from evasion.messenger import hub
 from evasion.messenger import frames
 from evasion.messenger import endpoint
-from evasion.common.testing import withhub
+from ..testing import withhub
 
 TIMEOUT = 5
 
