@@ -49,8 +49,12 @@ class MessengerTC(unittest.TestCase):
         self.assertEquals(rc, correct)
 
         # SYNC message:
-        correct = ("SYNC", json.dumps(dict(version=frames.PKG.version)))
-        rc = frames.sync_message()
+        correct = ("SYNC", json.dumps({"from":"endpoint-12"}))
+        rc = frames.sync_message("endpoint-12")
+        self.assertEquals(rc, correct)
+
+        correct = ("SYNC", json.dumps({"from":"hub-1"}))
+        rc = frames.sync_message("hub-1")
         self.assertEquals(rc, correct)
 
         # Dispatch with/without reply uuid:
@@ -90,7 +94,7 @@ class MessengerTC(unittest.TestCase):
         # Start receiving messages from the Hub and send the sync_message ready
         # to being receiving:
         tran.start()
-        tran.message_out(frames.sync_message())
+        tran.message_out(frames.sync_message('endpoint-1234'))
 
         # Send a message.
         test_message = ("hello", "there")
@@ -144,7 +148,7 @@ class MessengerTC(unittest.TestCase):
         self.assertEquals(result, True)
 
         # Messages that won't be propagated:
-        result = hub.MessagingHub.propogate_message(frames.sync_message())
+        result = hub.MessagingHub.propogate_message(frames.sync_message('hub-123'))
         self.assertEquals(result, False)
 
         result = hub.MessagingHub.propogate_message(frames.hub_present_message())
@@ -168,6 +172,7 @@ class MessengerTC(unittest.TestCase):
                 self.started = False
                 self.stopped = False
                 self.msg_out = ''
+                self.endpoint_uuid = "fakeendpoint-uuid"
             def start(self):
                 self.started = True
             def stop(self):
@@ -240,11 +245,26 @@ class MessengerTC(unittest.TestCase):
         self.assertEquals(reg.sync_called, False)
         self.assertEquals(reg.hubpresent_called, False)
 
-        reg.message_handler(frames.sync_message())
+        reg.message_handler(frames.sync_message("hub-94837"))
         self.assertEquals(reg.sync_called, True)
 
         reg.message_handler(frames.hub_present_message())
         self.assertEquals(reg.hubpresent_called, True)
+
+        # Now unsubscribe and make sure the callback isn't called:
+        #
+        # Check the back is called:
+        dispatch_msg = frames.dispatch_message(reg.endpoint_uuid, 'tea_time', dict(cake="sponge"))
+        self.assertEquals(ft.msg_out, dispatch_msg)
+        reg.message_handler(dispatch_msg)
+        self.assertEquals(tea_time_handler.data, (reg.endpoint_uuid, dict(cake="sponge"), None))
+        # now unsubscribe:
+        tea_time_handler.data = None
+        reg.unsubscribe('tea_time', tea_time_handler)
+        # Make sure no data is recived:
+        msg = frames.dispatch_message(reg.endpoint_uuid, 'ducks', dict(like="bread"))
+        reg.message_handler(msg)
+        self.assertEquals(tea_time_handler.data, None)
 
         # Test the unhandled message:
         msg = ["hello", "1234"]
@@ -257,7 +277,7 @@ class MessengerTC(unittest.TestCase):
         reg.message_handler(msg)
         self.assertEquals(tea_time_handler.data, None)
         self.assertEquals(reg.err, ('error', msg))
-        
+
         # Bad dispatch JSON
         msg = ["DISPATCH", "endpoint_uuid", "bob-sig", "{bad:json}", "0"]
         reg.message_handler(msg)
@@ -269,5 +289,14 @@ class MessengerTC(unittest.TestCase):
         self.assertEquals(ft.stopped, True)
 
 
+    def test_increased_coverage(self):
+        """Misc tests to attempt coverage of missing areas highlighted by coverage.
+        """
+        ep = endpoint.Register(TESTHUB.config)
+        ep.start()
+        ep.stop()
+
+        # Main should exit straight away as exit flag is still set
+        ep.main()
 
 

@@ -33,7 +33,10 @@ class Transceiver(object):
         """
         self.log = logging.getLogger("evasion.messenger.endpoint.Transceiver")
 
-        self.exitTime = False
+        self.endpoint_uuid = str(uuid.uuid4())
+
+        self.exit_time = threading.Event()
+        self.wait_for_exit = threading.Event()
 
         self.incoming = None # configured in main().
         self.incoming_uri = config.get("incoming", 'tcp://localhost:15566')
@@ -46,7 +49,9 @@ class Transceiver(object):
         self.log.info("Idle Timeout (ms): %d" % self.idle_timeout)
 
         self.message_handler = message_handler
-        self.sync_message = frames.sync_message()
+        self.sync_message = frames.sync_message(
+            "endpoint-%s" % self.endpoint_uuid
+        )
 
 
     def main(self):
@@ -59,11 +64,21 @@ class Transceiver(object):
         incoming.setsockopt(zmq.SUBSCRIBE, '')
         incoming.connect(self.incoming_uri)
 
+        def _shutdown():
+            try:
+                incoming.close()
+            except ZMQError:
+                self.log.exception("main: error calling context.term()")
+            try:
+                context.term()
+            except ZMQError:
+                self.log.exception("main: error calling context.term()")
+
         try:
             poller = zmq.Poller()
             poller.register(incoming, zmq.POLLIN)
 
-            while not self.exitTime:
+            while not self.exit_time.is_set():
                 try:
                     events = poller.poll(self.idle_timeout)
 
@@ -77,25 +92,31 @@ class Transceiver(object):
                         msg = incoming.recv_multipart()
                         self.message_in(tuple(msg))
         finally:
-            incoming.close()
-            context.term()
+            self.wait_for_exit.set()
+            _shutdown()
 
 
     def start(self):
         """Set up zmq communication and start receiving messages from the hub.
         """
-        def _main(notused):
+        # coverage can't seem to get to this:
+        def _main(notused): # pragma: no cover
+            self.exit_time.clear()
+            self.wait_for_exit.clear()
             self.main()
         thread.start_new(_main, (0,))
 
 
-    def stop(self):
+    def stop(self, wait=2):
         """Stop receiving messages from the hub and clean up.
+
+        :param wait: The time in seconds to wait before giving up
+        on a clean shutdown.
+
         """
         self.log.info("stop: shutting down messaging.")
-        self.exitTime = True
-        if self.incoming:
-            self.incoming.close()
+        self.exit_time.set()
+        self.wait_for_exit.wait(wait)
         self.log.info("stop: done.")
 
 
@@ -107,6 +128,18 @@ class Transceiver(object):
 
         If the message is not a tuple or list then MessageOutError
         will be raised.
+
+        A SYNC message will be sent before the message is sent:
+
+          http://zguide.zeromq.org/page:all#Getting-the-Message-Out
+
+          There is one more important thing to know about PUB-SUB sockets: you
+          do not know precisely when a subscriber starts to get messages. Even
+          if you start a subscriber, wait a while, and then start the publisher,
+          the subscriber will always miss the first messages that the publisher
+          sends. This is because as the subscriber connects to the publisher
+          (something that takes a small but non-zero time), the publisher may
+          already be sending messages out.
 
         :returns: None.
 
@@ -139,7 +172,7 @@ class Transceiver(object):
         """
         if self.message_handler:
             try:
-                self.log.debug("message_in: message <%s>" % str(message))
+                #self.log.debug("message_in: message <%s>" % str(message))
                 self.message_handler(message)
             except:
                 self.log.exception("message_in: Error handling received message - ")
@@ -172,13 +205,18 @@ class Register(object):
         """
         self.log = logging.getLogger("evasion.messenger.endpoint.Register")
 
-        self.endpoint_uuid = str(uuid.uuid4())
         self._subscriptions = dict()
 
         if not transceiver:
             self.transceiver = Transceiver(config, self.message_handler)
         else:
             self.transceiver = transceiver
+
+
+    @property
+    def endpoint_uuid(self):
+        """Return the transceiver's endpoint_uuid."""
+        return self.transceiver.endpoint_uuid
 
 
     @classmethod
@@ -214,6 +252,11 @@ class Register(object):
     def stop(self):
         """Call the transceiver's stop()."""
         self.transceiver.stop()
+
+
+    def main(self):
+        """Call the transceiver's main() running the mainloop until stopped."""
+        self.transceiver.main()
 
 
     def handle_dispath_message(self, endpoint_uuid, signal, data, reply_to):
@@ -372,7 +415,15 @@ class Register(object):
         :param callback: The function to unsubscribe.
 
         """
+        signal = self.validate_signal(signal)
 
+        if signal in self._subscriptions:
+            try:
+                self._subscriptions[signal].remove(callback)
+            except ValueError:
+                self.log.warn("unsubscribe: The callback<%s> is not subscribed for <%s>. Ignoring request." % (str(callback), signal))
+            else:
+                self.log.debug("unsubscribe: The callback<%s> has been unsubscribed from <%s>" % (callback, signal))
 
 
     def publish(self, signal, data):

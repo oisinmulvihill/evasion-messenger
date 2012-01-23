@@ -28,17 +28,35 @@ def hub_present_message():
     return ("HUB_PRESENT", json.dumps(dict(version=PKG.version)))
 
 
-def sync_message():
-    """Return the SYNC message is sent from endpoints to the hub on start.
+def sync_message(source):
+    """Return the SYNC message is sent between endpoints and hubs.
+
+    :param source: This is an identifier string indicating the
+    source of the sync.
+
+    SYNC messages are not propagated by the hub or endpoint and
+    are silently consumed.
+
+    Note: SYNC messages are used because:
+
+      http://zguide.zeromq.org/page:all#Getting-the-Message-Out
+
+      There is one more important thing to know about PUB-SUB sockets: you
+      do not know precisely when a subscriber starts to get messages. Even
+      if you start a subscriber, wait a while, and then start the publisher,
+      the subscriber will always miss the first messages that the publisher
+      sends. This is because as the subscriber connects to the publisher
+      (something that takes a small but non-zero time), the publisher may
+      already be sending messages out.
 
     :returns: A multi-part SYNC message.
 
     For example::
 
-        ('SYNC', '{"version":"X.Y.Z"}')
+        ('SYNC', '{"from":"endpoint-uuid"}')
 
     """
-    return ("SYNC", json.dumps(dict(version=PKG.version)))
+    return ("SYNC", json.dumps({"from": source}))
 
 
 def dispatch_message(endpoint_id, signal, data, reply_to=None):

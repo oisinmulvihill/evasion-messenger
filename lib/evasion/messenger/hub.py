@@ -3,6 +3,7 @@
 This provides the MessagingHub class which implements a very basic broker which
 
 """
+import uuid
 import signal
 import thread
 import logging
@@ -44,6 +45,8 @@ class MessagingHub(object):
         """
         self.log = logging.getLogger("evasion.messenger.MessagingHub")
 
+        self.hub_uuid = str(uuid.uuid4())
+
         self.exit_time = threading.Event()
         self.wait_for_exit = threading.Event()
 
@@ -61,6 +64,10 @@ class MessagingHub(object):
         self.show_messages = bool(config.get("show_messages", False))
         self.show_hub_presence = bool(config.get("show_hub_presence", False))
         self.send_hub_present = bool(config.get("send_hub_present", True))
+
+        self.sync_message = frames.sync_message(
+            "hub-%s" % self.hub_uuid
+        )
 
 
     @classmethod
@@ -107,6 +114,19 @@ class MessagingHub(object):
 
     def main(self):
         """Run the message distribution until shutdown is called.
+
+        A SYNC message will be sent before the a message propagated:
+
+          http://zguide.zeromq.org/page:all#Getting-the-Message-Out
+
+          There is one more important thing to know about PUB-SUB sockets: you
+          do not know precisely when a subscriber starts to get messages. Even
+          if you start a subscriber, wait a while, and then start the publisher,
+          the subscriber will always miss the first messages that the publisher
+          sends. This is because as the subscriber connects to the publisher
+          (something that takes a small but non-zero time), the publisher may
+          already be sending messages out.
+
         """
         self.exit_time.clear()
 
@@ -116,6 +136,7 @@ class MessagingHub(object):
         try:
             dispatch.bind(self.outgoing_uri)
         except ZMQError:
+            self.log.exception("main: unable to bind to uri <%s> " % (self.outgoing_uri))
             self.exit_time.set()
             return
 
@@ -123,6 +144,7 @@ class MessagingHub(object):
         try:
             incoming.bind(self.incoming_uri)
         except ZMQError:
+            self.log.exception("main: unable to bind to uri <%s> " % (self.incoming_uri))
             dispatch.close()
             self.exit_time.set()
             return
@@ -173,7 +195,7 @@ class MessagingHub(object):
                         log_message("main: received<%s>" % message)
                         if self.propogate_message(message):
                             # Sync before begining then send the message:
-                            dispatch.send_multipart(frames.sync_message())
+                            dispatch.send_multipart(self.sync_message)
                             dispatch.send_multipart(message)
                             log_message("main: propagated<%s>" % message)
                     else:
@@ -182,8 +204,7 @@ class MessagingHub(object):
                             dispatch.send_multipart(HUB_PRESENT)
         finally:
             _shutdown()
-
-
+            self.wait_for_exit.set()
 
 
 def main():
