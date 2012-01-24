@@ -35,9 +35,7 @@ subscribe to time messages and display the current time.
 Server
 ``````
 
-time_server.py:
-
-.. code-block:: python
+time_server.py:: python
 
     # need time_server.py code here
 
@@ -45,9 +43,7 @@ time_server.py:
 Client
 ``````
 
-time_client.py:
-
-.. code-block:: python
+time_client.py:: python
 
     # need time_client.py code here
 
@@ -69,9 +65,7 @@ see some output like::
 Improved Client
 ```````````````
 
-time_client2.py:
-
-.. code-block:: python
+time_client2.py:: python
 
     # need time_client2.py code here
 
