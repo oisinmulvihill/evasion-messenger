@@ -6,6 +6,7 @@ import uuid
 import thread
 import logging
 import threading
+from Queue import LifoQueue
 
 import zmq
 from zmq import ZMQError
@@ -53,9 +54,16 @@ class Transceiver(object):
             "endpoint-%s" % self.endpoint_uuid
         )
 
+        # Queue up messages to be sent in the main message loop
+        self._out_queue = LifoQueue()
+
 
     def main(self):
-        """Running the message receiving loop and on idletime check the exit flag.
+        """Running the main loop sending and receiving.
+
+        This will keep running until stop() is called. This
+        sets the exit flag causing clean up and shutdown.
+
         """
         self.exitTime = False
 
@@ -64,11 +72,18 @@ class Transceiver(object):
         incoming.setsockopt(zmq.SUBSCRIBE, '')
         incoming.connect(self.incoming_uri)
 
+        outgoing = context.socket(zmq.PUSH);
+        outgoing.connect(self.outgoing_uri);
+
         def _shutdown():
             try:
                 incoming.close()
             except ZMQError:
-                self.log.exception("main: error calling context.term()")
+                self.log.exception("main: error calling incoming.close()")
+            try:
+                outgoing.close()
+            except ZMQError:
+                self.log.exception("main: error calling outgoing.close()")
             try:
                 context.term()
             except ZMQError:
@@ -84,13 +99,52 @@ class Transceiver(object):
 
                 except ZMQError as e:
                     # 4 = 'Interrupted system call'
-                    self.log.info("main: sigint or other signal interrupt, exit time <%s>" % e)
+                    if e.errno == 4:
+                        self.log.info("main: exit time: %s" % e)
+                        break
+                    else:
+                        self.log.info("main: <%s>" % e)
+                        break
+
+                except Exception:
+                    self.log.exception("main: fatal error while polling ")
                     break
 
                 else:
                     if (events > 0):
                         msg = incoming.recv_multipart()
                         self.message_in(tuple(msg))
+
+                    # Now recover and queued outgoing messages:
+                    if not self._out_queue.empty():
+                        message = self._out_queue.get_nowait()
+                        if message:
+                            try:
+                                # send sync hub followed by message. The sync
+                                # will kick the hub into life if its just
+                                # started:
+                                outgoing.send_multipart(self.sync_message)
+                                outgoing.send_multipart(message)
+
+                            except ZMQError as e:
+                                # 4 = 'Interrupted system call'
+                                if e.errno == 4:
+                                    self.log.info((
+                                        "main: sigint or other signal interrupt"
+                                        ", exit time <%s>"
+                                    ) % e)
+                                    break
+                                else:
+                                    self.log.info("main: <%s>" % e)
+                                    break
+
+                            except Exception:
+                                self.log.exception("main: fatal error sending ")
+                                break
+
+                            finally:
+                                self._out_queue.task_done()
+
         finally:
             self.wait_for_exit.set()
             _shutdown()
@@ -129,45 +183,31 @@ class Transceiver(object):
         If the message is not a tuple or list then MessageOutError
         will be raised.
 
-        A SYNC message will be sent before the message is sent:
-
-          http://zguide.zeromq.org/page:all#Getting-the-Message-Out
-
-          There is one more important thing to know about PUB-SUB sockets: you
-          do not know precisely when a subscriber starts to get messages. Even
-          if you start a subscriber, wait a while, and then start the publisher,
-          the subscriber will always miss the first messages that the publisher
-          sends. This is because as the subscriber connects to the publisher
-          (something that takes a small but non-zero time), the publisher may
-          already be sending messages out.
+        Note: The message is actually queued here so that the main loop will
+        send it when its ready.
 
         :returns: None.
 
         """
         if isinstance(message, list) or isinstance(message, tuple):
-            context = zmq.Context()
-            outgoing = context.socket(zmq.PUSH);
-            try:
-                # send a sync to kick off the hub:
-                outgoing.connect(self.outgoing_uri);
-                outgoing.send_multipart(self.sync_message)
-                #self.log.debug("message_out: message <%s>" % str(self.sync_message))
-                outgoing.send_multipart(message)
-                #self.log.debug("message_out: message <%s>" % str(message))
-            finally:
-                outgoing.close()
-                context.term()
+            self._out_queue.put(message)
         else:
-            raise MessageOutError("The message must be a list or tuple instead of <%s>" % type(message))
+            m = "The message must be a list or tuple instead of <%s>" % type(
+                message
+            )
+            raise MessageOutError(m)
 
 
     def message_in(self, message):
         """Called on receipt of an evasion frame to determine what to do.
 
         The message_handler set in the constructer will be called if one
-        was set.
+        was set. If none was set then the message will be logged at the
+        DEBUG level.
 
         :param message: A tuple or list representing a multipart ZMQ message.
+
+        :returns: None.
 
         """
         if self.message_handler:
@@ -175,7 +215,7 @@ class Transceiver(object):
                 #self.log.debug("message_in: message <%s>" % str(message))
                 self.message_handler(message)
             except:
-                self.log.exception("message_in: Error handling received message - ")
+                self.log.exception("message_in: Error handling message - ")
         else:
             self.log.debug("message_in: message <%s>" % str(message))
 
@@ -219,14 +259,19 @@ class Register(object):
         return self.transceiver.endpoint_uuid
 
 
+    @property
+    def exit_time(self):
+        """Returns True if the transceiver is shutting down i.e. stop called."""
+        return self.transceiver.exit_time.isSet()
+
+
     @classmethod
     def validate_signal(cls, signal):
         """Sanity check the given signal string.
 
         :param signal: This must be a non empty string.
 
-        ValueError will be raised if signal is not a string
-        or empty.
+        ValueError will be raised if signal is not a string or empty.
 
         :returns: For a given string a stripped upper case string.
 
@@ -235,7 +280,10 @@ class Register(object):
 
         """
         if not isinstance(signal, basestring):
-            raise ValueError("The signal must be a string and not <%s>" % type(signal))
+            raise ValueError(
+                "The signal must be a string and not <%s>" % type(
+                signal
+            ))
 
         signal = signal.strip().upper()
         if not signal:
@@ -260,23 +308,32 @@ class Register(object):
 
 
     def handle_dispath_message(self, endpoint_uuid, signal, data, reply_to):
-        """Handle a DISPATCH message.
+        """Handle a DISPATCH message received.
+
+        This will look in the subscriptions for the signal. It will then
+        go through calling each function present.
+
+        The signature of the function subscribed must be:
+
+        .. code-block:: python
+
+            signal_subscriber(endpoint_uuid, data, reply_to)
 
         :returns: None.
 
         """
-        #self.log.debug("handle_dispath_message: %s" % str((endpoint_uuid, signal, data, reply_to)))
         signal = self.validate_signal(signal)
 
         if signal in self._subscriptions:
             for signal_subscriber in self._subscriptions[signal]:
                 try:
-                    signal_subscriber(endpoint_uuid, data, reply_to if reply_to != '0' else None)
+                    reply_to = reply_to if reply_to != '0' else None
+                    signal_subscriber(endpoint_uuid, data, reply_to)
                 except:
-                    self.log.exception("handle_dispath_message: the callback <%s> for signal <%s> has errored - " % (signal_subscriber, signal))
-        else:
-            #self.log.debug("handle_dispath_message: no one is subscribed to the signal <%s>. Ignoring." % signal)
-            pass
+                    self.log.exception((
+                        "handle_dispath_message: the callback <%s> for signal "
+                        "<%s> has errored - "
+                    ) % (signal_subscriber, signal))
 
 
     def handle_hub_present_message(self, payload):
@@ -284,7 +341,11 @@ class Register(object):
 
         :param payload: This the content of a HUB_PRESENT message from the hub.
 
-        Currently it is a dict in the form: dict(version='X.Y.Z')
+        Currently it is a dict in the form:
+
+        .. code-block:: python
+
+            dict(version='X.Y.Z')
 
         :returns: None.
 
@@ -297,7 +358,15 @@ class Register(object):
 
         :param payload: version of the hub message.
 
-        Currently it is a dict in the form: dict(version='X.Y.Z')
+        Currently it is a dict in the form:
+
+        .. code-block:: python
+
+            {"from": "endpoint-<uuid string>"}
+
+            # or
+
+            {"from": "hub-<uuid string>"}
 
         :returns: None.
 
@@ -310,11 +379,13 @@ class Register(object):
 
         :param reason: 'unknown' or 'error'
 
-        :param message: The received junk.
+        :param message: The raw message received.
 
         """
         if reason == 'unknown':
-            self.log.warn("message_handler: unknown message command <%s> no action taken." % message[0])
+            self.log.warn("message_handler: unknown command <%s> ignore." % (
+                message[0]
+            ))
         else:
             self.log.error("message_handler: invalid message <%s>" % message)
 
@@ -324,13 +395,8 @@ class Register(object):
 
         :param message: This must be a message in the Evasion frame format.
 
-        For example::
-
-            'DISPATCH endpoint_uuid some_signal {json object} reply_to'
-
         The message_handler will attempt to decode the first word and
-        use it to call the corresponding method. In the above example
-        handle_hub_present_message() would be called.
+        use it to call the corresponding method.
 
         """
         try:
@@ -348,7 +414,9 @@ class Register(object):
                 if command == "dispatch":
                     endpoint_uuid, signal, data, reply_to = command_args
                     data = json.loads(data)
-                    self.handle_dispath_message(endpoint_uuid, signal, data, reply_to)
+                    self.handle_dispath_message(
+                        endpoint_uuid, signal, data, reply_to
+                    )
 
                 elif command == "hub_present":
                     data = json.loads(command_args[0])
@@ -362,7 +430,8 @@ class Register(object):
                     self.unhandled_message('unknown', message)
 
         except Exception:
-            self.log.exception("message_handler: error processing message <%s> " % str(message))
+            m = "message_handler: error processing message <%s> " % str(message)
+            self.log.exception(m)
             self.unhandled_message('error', message)
 
 
@@ -404,7 +473,10 @@ class Register(object):
         if callback not in self._subscriptions:
             self._subscriptions[signal].append(callback)
         else:
-            self.log.warn("subscribe: The callback<%s> is already subscribed. Ignoring request." % str(callback))
+            self.log.warn((
+                "subscribe: The callback<%s> is already subscribed. "
+                "Ignoring request."
+            ) % str(callback))
 
 
 
@@ -421,9 +493,15 @@ class Register(object):
             try:
                 self._subscriptions[signal].remove(callback)
             except ValueError:
-                self.log.warn("unsubscribe: The callback<%s> is not subscribed for <%s>. Ignoring request." % (str(callback), signal))
+                self.log.warn((
+                    "unsubscribe: The callback<%s> is not subscribed for <%s>. "
+                    "Ignoring request."
+                ) % (str(callback), signal))
             else:
-                self.log.debug("unsubscribe: The callback<%s> has been unsubscribed from <%s>" % (callback, signal))
+                self.log.debug((
+                    "unsubscribe: The callback<%s> has been unsubscribed "
+                    "from <%s>"
+                ) % (callback, signal))
 
 
     def publish(self, signal, data):
@@ -434,8 +512,7 @@ class Register(object):
         :param data: This is a dictionary of data.
 
         """
-        #self.log.debug("publish: sending <%s> to hub with data <%s>"% (signal, data))
-
+        #self.log.debug("publish: sending <%s> to hub <%s>"% (signal, data))
         dispatch_message = frames.dispatch_message(
             self.endpoint_uuid,
             signal,

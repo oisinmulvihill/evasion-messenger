@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-This provides the MessagingHub class which implements a very basic broker which
+This provides the MessagingHub class and provides the main which is used by
+distutils to create the messagehub program. The hub implements a the broker
+which propagates certain messages around all connected endpoints.
 
 """
 import uuid
@@ -119,13 +121,13 @@ class MessagingHub(object):
 
           http://zguide.zeromq.org/page:all#Getting-the-Message-Out
 
-          There is one more important thing to know about PUB-SUB sockets: you
+          'There is one more important thing to know about PUB-SUB sockets: you
           do not know precisely when a subscriber starts to get messages. Even
           if you start a subscriber, wait a while, and then start the publisher,
           the subscriber will always miss the first messages that the publisher
           sends. This is because as the subscriber connects to the publisher
           (something that takes a small but non-zero time), the publisher may
-          already be sending messages out.
+          already be sending messages out.'
 
         """
         self.exit_time.clear()
@@ -136,7 +138,9 @@ class MessagingHub(object):
         try:
             dispatch.bind(self.outgoing_uri)
         except ZMQError:
-            self.log.exception("main: unable to bind to uri <%s> " % (self.outgoing_uri))
+            self.log.exception("main: unable to bind to uri <%s> " % (
+                self.outgoing_uri)
+            )
             self.exit_time.set()
             return
 
@@ -144,7 +148,9 @@ class MessagingHub(object):
         try:
             incoming.bind(self.incoming_uri)
         except ZMQError:
-            self.log.exception("main: unable to bind to uri <%s> " % (self.incoming_uri))
+            self.log.exception("main: unable to bind to uri <%s> " % (
+                self.incoming_uri)
+            )
             dispatch.close()
             self.exit_time.set()
             return
@@ -184,7 +190,9 @@ class MessagingHub(object):
                 except ZMQError as e:
                     # 4 = 'Interrupted system call'
                     if e.errno == 4:
-                        self.log.info("main: sigint or other signal interrupt, exit time <%s>" % e)
+                        self.log.info(
+                            "main: signal interrupt, exit time <%s>" % e
+                        )
                         break
                     else:
                         self.log.info("main: <%s>" % e)
@@ -242,9 +250,13 @@ def main():
     DEFAULT_SUBSCRIBE_ON = 'tcp://*:15567'
 
     parser.add_option(
-        "--wait-for-message-timeout", action="store", dest="wait_for_message_timeout",
+        "--wait-for-message-timeout", action="store",
+        dest="wait_for_message_timeout",
         default=DEFAULT_TIMEOUT,
-        help="The time (in milliseconds, default: %d) to wait for messages before timing out and sending a HUB_PRESENT." % DEFAULT_TIMEOUT,
+        help=(
+            "The time (in milliseconds, default: %d) to wait for "
+            "messages before timing out and sending a HUB_PRESENT."
+        ) % DEFAULT_TIMEOUT,
     )
 
     parser.add_option(
@@ -260,7 +272,8 @@ def main():
     )
 
     parser.add_option(
-        "--disable-hub-presence", action="store_true", dest="disable_hub_presence",
+        "--disable-hub-presence", action="store_true",
+        dest="disable_hub_presence",
         default=False,
         help="Turn off the dispatch of HUB_PRESENCE when idle.",
     )

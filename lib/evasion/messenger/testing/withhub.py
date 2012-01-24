@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-This provides HubHelper which requires evasion-messenger
-to be installed.
+This provides TestModuleHelper which is used in tests to provide a working
+messaging hub.
 
 """
 import logging

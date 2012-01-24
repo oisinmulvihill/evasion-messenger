@@ -4,7 +4,7 @@
 import json
 import logging
 import unittest
-
+import threading
 
 from evasion.common import signal
 from evasion.messenger import hub
@@ -94,10 +94,10 @@ class MessengerTC(unittest.TestCase):
         # Start receiving messages from the Hub and send the sync_message ready
         # to being receiving:
         tran.start()
-        tran.message_out(frames.sync_message('endpoint-1234'))
 
         # Send a message.
         test_message = ("hello", "there")
+        tran.message_out(frames.sync_message('endpoint-1234'))
         tran.message_out(test_message)
 
         # We should now have received this back again:
@@ -173,9 +173,12 @@ class MessengerTC(unittest.TestCase):
                 self.stopped = False
                 self.msg_out = ''
                 self.endpoint_uuid = "fakeendpoint-uuid"
+                self.exit_time = threading.Event()
             def start(self):
+                self.exit_time.clear()
                 self.started = True
             def stop(self):
+                self.exit_time.set()
                 self.stopped = True
             def message_out(self, message):
                 self.msg_out = message
@@ -202,6 +205,8 @@ class MessengerTC(unittest.TestCase):
         # Use the fake transceiver an emulate hub-endpoint comms.
         ft = FakeTransceiver(TESTHUB.config['endpoint'])
         reg = RegisterUnderTest(transceiver=ft)
+
+        self.assertEquals(reg.exit_time(), False)
 
         # check the transceiver initial state:
         self.assertEquals(ft.stopped, False)
@@ -288,15 +293,21 @@ class MessengerTC(unittest.TestCase):
         reg.stop()
         self.assertEquals(ft.stopped, True)
 
+        self.assertEquals(self.reg.exit_time(), False)
+
 
     def test_increased_coverage(self):
         """Misc tests to attempt coverage of missing areas highlighted by coverage.
         """
         ep = endpoint.Register(TESTHUB.config)
+
+        self.assertEquals(ep.exit_time, False)
         ep.start()
+        self.assertEquals(ep.exit_time, False)
         ep.stop()
 
         # Main should exit straight away as exit flag is still set
         ep.main()
 
+        self.assertEquals(ep.exit_time, True)
 
