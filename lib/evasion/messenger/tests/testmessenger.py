@@ -206,7 +206,7 @@ class MessengerTC(unittest.TestCase):
         ft = FakeTransceiver(TESTHUB.config['endpoint'])
         reg = RegisterUnderTest(transceiver=ft)
 
-        self.assertEquals(reg.exit_time(), False)
+        self.assertEquals(reg.exit_time, False)
 
         # check the transceiver initial state:
         self.assertEquals(ft.stopped, False)
@@ -292,8 +292,7 @@ class MessengerTC(unittest.TestCase):
         # Done:
         reg.stop()
         self.assertEquals(ft.stopped, True)
-
-        self.assertEquals(self.reg.exit_time(), False)
+        self.assertEquals(reg.exit_time(), False)
 
 
     def test_increased_coverage(self):
