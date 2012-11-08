@@ -1,305 +1,312 @@
-#!/usr/bin/env python
-# encoding: utf-8
+# -*- coding: utf-8 -*-
 """
-testmessenger.py
-
-Created by Oisin Mulvihill on 2007-07-30.
-
 """
-import pprint
+import json
+import logging
 import unittest
+import threading
 
-import stomper
-from pydispatch import dispatcher
+from evasion.common import signal
+from evasion.messenger import hub
+from evasion.messenger import frames
+from evasion.messenger import endpoint
 
-from evasion import messenger
+from evasion.messenger.testing import withhub
 
-# Short circuit the twisted code for testing. NOT for production use!!
-messenger.stompprotocol.TESTING_ACTIVE = True
-
-        
-class FakeTransport(object):
-    def __init__(self):
-        self.data = None
-    def write(self, cmd):
-        self.data = cmd
+TIMEOUT = 10
 
 
-class TestMessenger(unittest.TestCase):
-    """Exercise the stomp and xulcontrol protocols code along with any related functionality.
-    """
+TESTHUB = withhub.TestModuleHelper()
 
-
-    def testStompProtocol(self):
-        """Test as much of the StompProtocol class as I can.
-        """
-        username, password = 'bob', '1234'
-        protocol = messenger.stompprotocol.StompProtocol(username, password)
-        protocol.transport = FakeTransport()
-
-        # Check connection made
-        protocol.connectionMade()
-        
-        correct = stomper.connect(username, password)
-        self.assertEquals(protocol.transport.data, correct)
-        protocol.transport.data = None
-
-        msg = stomper.unpack_frame("""CONNECTED
-session:ID:snorky.local-49191-1185461799654-3:18
-
-\x00
-""")
-        
-        # Check the connected handler and the signal connect
-        # it should now have set up.
-        result = protocol.connected(msg)
-
-        # This is the subscribe command it'll setup now:
-        f = stomper.Frame()
-        f.cmd = "SUBSCRIBE"
-        f.headers['destination'] = messenger.stompprotocol.DESTINATION
-        # ActiveMQ specific header: Prevent the messages we send comming back to us.
-        f.headers['activemq.noLocal'] = 'true'
-
-        self.assertEquals(result, f.pack())
-
-
-        # Test the event ignoring for events that are not to be forwarded.
-        #
-        # Any events that are not a messenger event are ignored.
-        #
-        protocol.transport.data = None
-
-        dispatcher.send(
-            signal='SOME_EVENT',
-            data=[1,2,3,4,5,6,7,8,9,0]            
-        )
-
-        self.assertEquals(protocol.transport.data, None)
-
-        class Event(object):
-            """test event.
-            """
-        evt = Event()
-
-        dispatcher.send(
-            signal=evt,
-            data=[1,2,3,4,5,6,7,8,9,0]            
-        )
-
-        self.assertEquals(protocol.transport.data, None)
-
-
-        # Test the messenger event capture ignoring and forwarding:
-        #
-        protocol.transport.data = None
-        
-        dispatcher.send(
-            signal=messenger.EVT('SOME_EVENT'),
-            sender="testsnd",
-            data=[1,2,3,4,5,6,7,8,9,0]            
-        )
-
-        f = stomper.Frame()
-        f.cmd = "SEND"
-        f.headers['pydispatcher-event'] = 'yes'
-        f.headers['destination'] = messenger.stompprotocol.DESTINATION
-        correct_out = dict(
-            signal=messenger.EVT('SOME_EVENT'),
-            sender="testsnd",
-            data={'data':[1,2,3,4,5,6,7,8,9,0]})
-            
-        f.body = messenger.stompprotocol.dump(correct_out)
-        correct_message = f.pack()
-
-#        print "Correct"
-#        pprint.pprint(correct_message)
-#        print "Correct"
-#        pprint.pprint(correct_out)
-#        print
-        
-#        print "Result"
-#        pprint.pprint(protocol.transport.data)
-#        print "Result"
-        f = stomper.unpack_frame(protocol.transport.data)
-        result = messenger.stompprotocol.load(f['body'])
-#        pprint.pprint(result)
-#        print
-        
-        self.assertEquals(result, correct_out)
-        
-        protocol.transport.data = None
-
-
-        # local only
-        dispatcher.send(
-            signal=messenger.EVT('SOME_EVENT', local_only=True),
-            data=[1,2,3,4,5,6,7,8,9,0]            
-        )
-
-        self.assertEquals(protocol.transport.data, None)
-
-        # local only
-        dispatcher.send(
-            signal=messenger.LEVT('SOME_EVENT'),
-            sender=dispatcher._Anonymous,
-            data=[1,2,3,4,5,6,7,8,9,0]            
-        )
-
-        self.assertEquals(protocol.transport.data, None)
-        
-        
-        # Test the event receive end of the protocol:
-        msg = stomper.unpack_frame(correct_message)
-        
-        class CB(object):
-            returned = None
-            def callback(self, evt):
-                self.returned = evt
-                
-        cb = CB()
-        protocol.ack(msg, cb.callback)
-
-##         print "Correct"
-##         pprint.pprint(correct_out)
-##         print
-
-##         print "result"
-##         pprint.pprint(cb.returned)
-##         print
-        
-        self.assertEquals(cb.returned['data'], correct_out['data'])
-        self.assertEquals(cb.returned['sender'], correct_out['sender'])
-        self.assertEquals(cb.returned['signal'].eid, correct_out['signal'].eid)
-        self.assertEquals(cb.returned['signal'].remoteForwarded, True)
-
-
-
-    def testXulControlProtocol(self):
-        """Test as much of the StompProtocol class as I can.
-        """
-        protocol = messenger.xulcontrolprotocol.XulControlProtocol()    
-        protocol.transport = FakeTransport()
-        protocol.transport.data = None
-        
-        # Check connection made and the signal connect
-        # it should now have set up.
-        protocol.connectionMade()
-
-        control_frame = {
-            'command' : 'set_uri',
-            'args' : {'uri':'http://www.google.com'}
-        }
-
-        out = dict(replyto='', data=control_frame)
-
-        dispatcher.send(
-            signal='BROWSER_COMMAND',
-            data=control_frame,          
-        )
-
-        correct_message = messenger.xulcontrolprotocol.dump(out)
-        
-        self.assertEquals(protocol.transport.data, correct_message)
-        
-
-        # Check replyto addition:
-        sender = ""
-        out = dict(replyto=sender, data=control_frame)
-
-        dispatcher.send(
-            signal='BROWSER_COMMAND',
-            sender=sender,
-            data=control_frame,          
-        )
-
-        correct_message = messenger.xulcontrolprotocol.dump(out)
+# Nose will run these creating a test hub which we can use:
 #
-#        print "Correct"
-#        pprint.pprint(correct_message)
-#        print
-#
-#        print "result"
-#        pprint.pprint(protocol.transport.data)
-#        print
-        
-        self.assertEquals(protocol.transport.data, correct_message)
+setup_module = TESTHUB.setup_module
+teardown_module = TESTHUB.teardown_module
 
 
-        # Check it ignores other types of senders:
-        sender = "SENDERxyz"
-        out = dict(replyto='', data=control_frame)
+class MessengerTC(unittest.TestCase):
 
-        dispatcher.send(
-            signal='BROWSER_COMMAND',
-            sender=sender,
-            data=control_frame,          
-        )
+    log = logging.getLogger("evasion.messenger.tests.testmessenger.MessengerTC")
 
-        correct_message = messenger.xulcontrolprotocol.dump(out)
-        
-        self.assertEquals(protocol.transport.data, correct_message)
-
-        sender = "SENDERxyz"
-        out = dict(replyto='', data=control_frame)
-
-        dispatcher.send(
-            signal='BROWSER_COMMAND',
-            sender=sender,
-            data=control_frame,          
-        )
-
-        correct_message = messenger.xulcontrolprotocol.dump(out)
-        
-        self.assertEquals(protocol.transport.data, correct_message)
+    def setUp(self):
+        self.to_stop = []
 
 
-        # Check the reply handling:
-        returned = {
-            'result' : 'ok',
-            'replyto' : '',
-            'data' : '',
-        }
-        msg = messenger.xulcontrolprotocol.dump(returned)
-
-        def callback(evt):
-            self.assertEquals(evt, returned)
-
-        protocol.dataReceived(msg, testingCallback=callback)
+    def tearDown(self):
+        self.log.debug("Cleanup")
+        for i in self.to_stop:
+            if i:
+                i.stop
+        self.log.debug("Cleanup complete.")
 
 
-
-    def testXulControlDumpAndLoad(self):
-        """Test that xul control dump and load is functional.
+    def test_string_message_generation(self):
+        """Test the messages generated by convertions provides by frames.py
         """
-        original = {
-            'command' : 'redirect',
-            'data' : [1,2,3]
-        }
-        
-        part1 = messenger.xulcontrolprotocol.dump(original)
-        
-        new = messenger.xulcontrolprotocol.load(part1)
-        
-        self.assertEquals(original, new, "Dump and load failed!")
-        
+        # Hub present, hub heart beat message:
+        correct = ("HUB_PRESENT", json.dumps(dict(version=frames.PKG.version)))
+        rc = frames.hub_present_message()
+        self.assertEquals(rc, correct)
 
-    def testStompDumpAndLoad(self):
-        """Test that stomp protocol dump and load is functional.
+        # SYNC message:
+        correct = ("SYNC", json.dumps({"from":"endpoint-12"}))
+        rc = frames.sync_message("endpoint-12")
+        self.assertEquals(rc, correct)
+
+        correct = ("SYNC", json.dumps({"from":"hub-1"}))
+        rc = frames.sync_message("hub-1")
+        self.assertEquals(rc, correct)
+
+        # Dispatch with/without reply uuid:
+        sig = 'tea_time'
+        endpoint_uid = '0987'
+        reply_to_uid = '12345'
+        data = dict(a=1)
+
+        rc = frames.dispatch_message(endpoint_uid, sig, data, reply_to_uid)
+        correct = ("DISPATCH", endpoint_uid, sig, json.dumps(dict(a=1)), reply_to_uid)
+        self.assertEquals(rc, correct)
+
+        rc = frames.dispatch_message(endpoint_uid, sig, data)
+        correct = ("DISPATCH", endpoint_uid, sig, json.dumps(dict(a=1)), '0')
+        self.assertEquals(rc, correct)
+
+        # Dispatch reply:
+        data = dict(answer=10)
+        rc = frames.dispatch_reply_message(reply_to_uid, data)
+        correct = ("DISPATCH_REPLY", reply_to_uid, json.dumps(dict(answer=10)))
+        self.assertEquals(rc, correct)
+
+
+    def testTransceiverComms(self):
+        """Test the functionality of the Transceiver class on which the Register builds.
         """
-        original = {
-            'event' : 'SWIPE_CARD_DATA',
-            'data' : "1234567890"
-        }
-        
-        part1 = messenger.stompprotocol.dump(original)
-        
-        new = messenger.stompprotocol.load(part1)
-        
-        self.assertEquals(original, new, "Dump and load failed!")
-        
-        
+        # The Hub is running at this point. Now I need to set up the low
+        # level Transciever and the message handler. This will get passed
+        # all traffic received from the Hub. This includes any messages
+        # we sent, back to us for local distribution.
+        #
+        message_handler = signal.CallBack(TIMEOUT)
 
-    
-if __name__ == '__main__':
-    unittest.main()
+        tran = endpoint.Transceiver(TESTHUB.config['endpoint'], message_handler)
+        self.to_stop.append(tran) # clean up if test fails
+
+        # Start receiving messages from the Hub and send the sync_message ready
+        # to being receiving:
+        tran.start()
+
+        # Send a message.
+        test_message = ("hello", "there")
+        tran.message_out(frames.sync_message('endpoint-1234'))
+        tran.message_out(test_message)
+
+        # We should now have received this back again:
+        message_handler.wait()
+        self.assertEquals(message_handler.data, test_message)
+
+        # Make sure I can only send tuple/list messages:
+        invalid = ["abc",1,None,{}]
+        for invalid_message in invalid:
+            self.assertRaises(endpoint.MessageOutError, tran.message_out, invalid_message)
+
+        # Tuple/List only
+        tran.message_out(("Message",))
+        message_handler.wait()
+        self.assertEquals(message_handler.data, ("Message",))
+
+        tran.message_out(["Message",])
+        message_handler.wait()
+        self.assertEquals(message_handler.data, ("Message",))
+
+
+    def testRegisterSignalValidator(self):
+        """Test the Register.validate_signal class method.
+        """
+        # Valid cases:
+        self.assertEquals(endpoint.Register.validate_signal('A'), 'A')
+        self.assertEquals(endpoint.Register.validate_signal(' tea_time '), 'TEA_TIME')
+        self.assertEquals(endpoint.Register.validate_signal(' tea_time'), 'TEA_TIME')
+        self.assertEquals(endpoint.Register.validate_signal('tea_time '), 'TEA_TIME')
+
+        # Invalid cases:
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, " ")
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, "")
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, None)
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, {})
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, [])
+        self.assertRaises(ValueError, endpoint.Register.validate_signal, (0,))
+
+
+    def test_propogate_message(self):
+        """Test the Hub test_propogate_message and its rejection of ceartain type of messages.
+        """
+        # Messages that will be sent to all endpoints i.e dispatch messages and repies:
+        result = hub.MessagingHub.propogate_message(frames.dispatch_message('endpoint_uid', 'sig', {}))
+        self.assertEquals(result, True)
+
+        result = hub.MessagingHub.propogate_message(frames.dispatch_reply_message('reply_to_uid', {}))
+        self.assertEquals(result, True)
+
+        # Messages that won't be propagated:
+        result = hub.MessagingHub.propogate_message(frames.sync_message('hub-123'))
+        self.assertEquals(result, False)
+
+        result = hub.MessagingHub.propogate_message(frames.hub_present_message())
+        self.assertEquals(result, False)
+
+        # Bad mesasge data received:
+        result = hub.MessagingHub.propogate_message("")
+        self.assertEquals(result, False)
+
+        result = hub.MessagingHub.propogate_message([])
+        self.assertEquals(result, False)
+
+
+    def testPublistSubscribeRegisterAbiltiesUsingFakeTransciever(self):
+        """Test the publish-subscribe using a FakeTransceiver so there is no actual network traffic.
+        """
+        class FakeTransceiver(object):
+            def __init__(self, config={}, message_handler=None):
+                self.config = config
+                self.handler = message_handler
+                self.started = False
+                self.stopped = False
+                self.msg_out = ''
+                self.endpoint_uuid = "fakeendpoint-uuid"
+                self.exit_time = threading.Event()
+            def start(self):
+                self.exit_time.clear()
+                self.started = True
+            def stop(self):
+                self.exit_time.set()
+                self.stopped = True
+            def message_out(self, message):
+                self.msg_out = message
+
+
+        class TeaTimeHandler(signal.CallBack):
+            def __call__(self, endpoint_uuid, data, reply_to):
+                super(TeaTimeHandler, self).__call__((endpoint_uuid, data, reply_to))
+
+        tea_time_handler = TeaTimeHandler()
+
+
+        class RegisterUnderTest(endpoint.Register):
+            """Add some method to test the hub_present handler and others"""
+            hubpresent_called = False
+            sync_called = False
+            err = None
+            def handle_hub_present_message(self, payload):
+                self.hubpresent_called = True
+            def handle_sync_message(self, payload):
+                self.sync_called = True
+            def unhandled_message(self, reason, message):
+                self.err = (reason, message)
+        # Use the fake transceiver an emulate hub-endpoint comms.
+        ft = FakeTransceiver(TESTHUB.config['endpoint'])
+        reg = RegisterUnderTest(transceiver=ft)
+
+        self.assertEquals(reg.exit_time, False)
+
+        # check the transceiver initial state:
+        self.assertEquals(ft.stopped, False)
+        self.assertEquals(ft.started, False)
+        self.assertEquals(ft.msg_out, '')
+
+        reg.start()
+
+        self.assertEquals(ft.started, True)
+        self.assertEquals(ft.stopped, False)
+
+        # Now subscribe to the tea time message:
+        reg.subscribe('tea_time', tea_time_handler)
+
+        # No messages out yet:
+        self.assertEquals(ft.msg_out, '')
+
+        # This will result in a message out to the "hub", this will give it back
+        # for local dispatch. In a real one it would travel to all other end points
+        # as well:
+        reg.publish('tea_time', dict(cake="sponge"))
+
+        # No message in, however the DISPATCH message should be in the message_out
+        dispatch_msg = frames.dispatch_message(reg.endpoint_uuid, 'tea_time', dict(cake="sponge"))
+        self.assertEquals(ft.msg_out, dispatch_msg)
+
+        # Now simulate the message in by calling the Register handle_message
+        reg.message_handler(dispatch_msg)
+
+        # Out tea_time signal callback should contain the data and None for the
+        # reply_to field, as no reply was present:
+        self.assertEquals(tea_time_handler.data, (reg.endpoint_uuid, dict(cake="sponge"), None))
+        tea_time_handler.data = None
+
+        # Now simulate a dispatch for a signal not subscribed to:
+        msg = frames.dispatch_message(reg.endpoint_uuid, 'ducks', dict(like="bread"))
+        reg.message_handler(msg)
+        self.assertEquals(tea_time_handler.data, None)
+
+        # Test that SYNC and HUB_PRESENT are handled correctly
+        self.assertEquals(reg.sync_called, False)
+        self.assertEquals(reg.hubpresent_called, False)
+
+        reg.message_handler(frames.sync_message("hub-94837"))
+        self.assertEquals(reg.sync_called, True)
+
+        reg.message_handler(frames.hub_present_message())
+        self.assertEquals(reg.hubpresent_called, True)
+
+        # Now unsubscribe and make sure the callback isn't called:
+        #
+        # Check the back is called:
+        dispatch_msg = frames.dispatch_message(reg.endpoint_uuid, 'tea_time', dict(cake="sponge"))
+        self.assertEquals(ft.msg_out, dispatch_msg)
+        reg.message_handler(dispatch_msg)
+        self.assertEquals(tea_time_handler.data, (reg.endpoint_uuid, dict(cake="sponge"), None))
+        # now unsubscribe:
+        tea_time_handler.data = None
+        reg.unsubscribe('tea_time', tea_time_handler)
+        # Make sure no data is recived:
+        msg = frames.dispatch_message(reg.endpoint_uuid, 'ducks', dict(like="bread"))
+        reg.message_handler(msg)
+        self.assertEquals(tea_time_handler.data, None)
+
+        # Test the unhandled message:
+        msg = ["hello", "1234"]
+        reg.message_handler(msg)
+        self.assertEquals(tea_time_handler.data, None)
+        self.assertEquals(reg.err, ('unknown', msg))
+
+        # Malformed message should not blow up the message handler
+        msg = ["DISPATCH", ""]
+        reg.message_handler(msg)
+        self.assertEquals(tea_time_handler.data, None)
+        self.assertEquals(reg.err, ('error', msg))
+
+        # Bad dispatch JSON
+        msg = ["DISPATCH", "endpoint_uuid", "bob-sig", "{bad:json}", "0"]
+        reg.message_handler(msg)
+        self.assertEquals(tea_time_handler.data, None)
+        self.assertEquals(reg.err, ('error', msg))
+
+        # Done:
+        reg.stop()
+        self.assertEquals(ft.stopped, True)
+        self.assertEquals(reg.exit_time(), False)
+
+
+    def test_increased_coverage(self):
+        """Misc tests to attempt coverage of missing areas highlighted by coverage.
+        """
+        ep = endpoint.Register(TESTHUB.config)
+
+        self.assertEquals(ep.exit_time, False)
+        ep.start()
+        self.assertEquals(ep.exit_time, False)
+        ep.stop()
+
+        # Main should exit straight away as exit flag is still set
+        ep.main()
+
+        self.assertEquals(ep.exit_time, True)
+
