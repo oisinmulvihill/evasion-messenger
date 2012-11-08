@@ -35,9 +35,9 @@ subscribe to time messages and display the current time.
 Server
 ``````
 
-time_server.py:: python
+time_server.py:
 
-    # need time_server.py code here
+ * https://raw.github.com/oisinmulvihill/evasion-messenger/master/examples/timeservice/time_server.py
 
 
 Client
@@ -45,7 +45,7 @@ Client
 
 time_client.py:: python
 
-    # need time_client.py code here
+ * https://raw.github.com/oisinmulvihill/evasion-messenger/master/examples/timeservice/time_client.py
 
 The code for these are available in the source code examples/timeservice. To
 run these examples, start the messagehub and then run the "time_client.py" and
@@ -60,6 +60,19 @@ Before we begin, in a new command line terminal run the messagehub. You should
 see some output like::
 
     # Need messagehub default run output
+    $ messagehub
+    2012-11-08 19:56:36,226 evasion.messenger.MessagingHub INFO Dispatching on: tcp://*:15566
+    2012-11-08 19:56:36,226 evasion.messenger.MessagingHub INFO Incoming on: tcp://*:15567
+    2012-11-08 19:56:36,226 evasion.messenger.MessagingHub INFO Idle Timeout (ms): 1000
+    2012-11-08 19:56:36,228 evasion.messenger.MessagingHub INFO main: Mainloop running.
+
+    # (Later Press Ctrl-C to exit):
+    ^C
+    2012-11-08 19:56:40,697 root WARNING signal_handler: signal<2> caught, stopping hub.
+    2012-11-08 19:56:42,697 evasion.messenger.MessagingHub INFO main: signal interrupt, exit time <Interrupted system call>
+    2012-11-08 19:56:42,698 evasion.messenger.MessagingHub INFO main: Waiting for shutdown...
+    2012-11-08 19:56:42,699 evasion.messenger.MessagingHub INFO main: Shutdown complete.
+    $
 
 
 Improved Client
@@ -67,7 +80,7 @@ Improved Client
 
 time_client2.py:: python
 
-    # need time_client2.py code here
+ * https://raw.github.com/oisinmulvihill/evasion-messenger/master/examples/timeservice/time_client2.py
 
 
 Evasion PUB-SUB Messaging

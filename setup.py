@@ -7,6 +7,7 @@ Oisin Mulvihill
 2008-12-23
 
 """
+import os
 from setuptools import setup, find_packages
 
 Name='evasion-messenger'
@@ -15,10 +16,17 @@ Version='1.2.0'
 Author='Oisin Mulvihill'
 AuthorEmail='oisinmulvihill at gmail dot com'
 Maintainer=' Oisin Mulvihill'
-Summary='Messaging library used to package and delivery events'
+Summary='A Python ZeroMQ Pub/Sub Implementation and Messaging library.'
 License='Evasion Project CDDL License'
 ShortDescription=Summary
-Description=Summary
+
+# Add the README text if the file is present (not in egg).
+detailed = Summary
+if os.path.isfile("README.rst"):
+    with file("README.rst", "r") as fd:
+        detailed = fd.read()
+
+Description = detailed
 
 
 needed = [
