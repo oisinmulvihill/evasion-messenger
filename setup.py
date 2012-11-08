@@ -11,7 +11,7 @@ from setuptools import setup, find_packages
 
 Name='evasion-messenger'
 ProjectUrl="" #http://github.com/oisinmulvihill/evasion-messenger/tarball/master#egg=evasion_messenger"
-Version='1.2.dev1'
+Version='1.2.0'
 Author='Oisin Mulvihill'
 AuthorEmail='oisinmulvihill at gmail dot com'
 Maintainer=' Oisin Mulvihill'
@@ -23,7 +23,7 @@ Description=Summary
 
 needed = [
     'pyzmq',
-    'evasion-common',
+    'evasion-common==1.0.2',
 ]
 
 # needed for < python 2.6
